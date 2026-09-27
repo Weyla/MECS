@@ -8,6 +8,31 @@ static bool gpio_configured[MIO_CHANNELS];
 static uint16_t pwm_frequency[MIO_CHANNELS];
 static bool pwm_polarity[MIO_CHANNELS];
 
+/* Release the LEDC channel and its GPIO matrix output before reusing the pin.
+ * LEDC's fade service is intentionally not used: output changes are immediate
+ * and do not need a ramp. */
+static bool detach_pwm(uint8_t channel) {
+  if (!pwm_attached[channel]) {
+    return true;
+  }
+
+  if (ledc_stop(LEDC_LOW_SPEED_MODE, channel, 0) != ESP_OK) {
+    return false;
+  }
+
+  const ledc_channel_config_t release = {
+      .speed_mode = LEDC_LOW_SPEED_MODE,
+      .channel = channel,
+      .deconfigure = true,
+  };
+  if (ledc_channel_config(&release) != ESP_OK) {
+    return false;
+  }
+
+  pwm_attached[channel] = false;
+  return true;
+}
+
 bool do4_apply_output(void *context, uint8_t channel,
                       const mio_channel_config_t *config,
                       bool output_is_active) {
@@ -39,10 +64,27 @@ bool do4_apply_output(void *context, uint8_t channel,
     if (pwm_attached[channel] &&
         pwm_frequency[channel] == config->frequency_hz &&
         pwm_polarity[channel] == config->active_low) {
-      /* Duty-only edits update the existing signal without detaching the pin.
-       */
-      return ledc_set_duty_and_update(LEDC_LOW_SPEED_MODE, channel, duty, 0) ==
-             ESP_OK;
+      /* Duty-only changes do not use LEDC fading. Calls are serialized by the
+       * DO4 owner task, so the ordinary set/update pair is safe here. */
+      if (ledc_set_duty(LEDC_LOW_SPEED_MODE, channel, duty) != ESP_OK) {
+        return false;
+      }
+      return ledc_update_duty(LEDC_LOW_SPEED_MODE, channel) == ESP_OK;
+    }
+
+    /* A frequency or polarity change needs a fresh timer/channel setup. First
+     * release any existing LEDC claim so the GPIO matrix is not double-owned. */
+    if (!detach_pwm(channel)) {
+      return false;
+    }
+
+    /* Digital mode reserves the GPIO output path. Reset it before LEDC claims
+     * that same path, otherwise ESP-IDF reports a GPIO conflict on attachment. */
+    if (gpio_configured[channel]) {
+      if (gpio_reset_pin((gpio_num_t)config->pin) != ESP_OK) {
+        return false;
+      }
+      gpio_configured[channel] = false;
     }
 
     const ledc_timer_config_t timer = {
@@ -76,19 +118,8 @@ bool do4_apply_output(void *context, uint8_t channel,
   }
 
   /* Switch back from LEDC before applying a constant digital level. */
-  if (pwm_attached[channel]) {
-    if (ledc_stop(LEDC_LOW_SPEED_MODE, channel, 0) != ESP_OK) {
-      return false;
-    }
-    const ledc_channel_config_t release = {
-        .speed_mode = LEDC_LOW_SPEED_MODE,
-        .channel = channel,
-        .deconfigure = true,
-    };
-    if (ledc_channel_config(&release) != ESP_OK) {
-      return false;
-    }
-    pwm_attached[channel] = false;
+  if (!detach_pwm(channel)) {
+    return false;
   }
 
   const bool pin_active = enabled && (config->mode != MIO_OUTPUT_PWM ||

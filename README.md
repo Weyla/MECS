@@ -47,9 +47,12 @@ Framework examples are collected under the root `examples/` folder, with
 module-specific examples under `DI4/examples/` and `DO4/examples/`. ESP-IDF
 examples fetch components through GitHub Component Manager. Arduino and
 ESPHome packagers can download canonical sources directly from GitHub with
-`--github-ref main`. The ESPHome adapter still needs a complete firmware build
-check against a selected ESPHome release before it should be considered a
-released integration.
+`--github-ref main`. Arduino users can install the release ZIP from the IDE's
+**Sketch → Include Library → Add .ZIP Library…** menu; see
+[`examples/arduino/README.md`](examples/arduino/README.md). The ZIP is created
+for versioned `arduino-vMAJOR.MINOR.PATCH` tags. The ESPHome adapter still
+needs a complete firmware build check against a selected ESPHome release before
+it should be considered a released integration.
 
 Module examples: [DI4 inputs](https://github.com/Weyla/MECS/tree/main/DI4/examples)
 and [DO4 outputs](https://github.com/Weyla/MECS/tree/main/DO4/examples).

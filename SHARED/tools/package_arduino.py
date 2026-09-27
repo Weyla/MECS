@@ -3,7 +3,9 @@
 
 from pathlib import Path
 import argparse
+import re
 import shutil
+import sys
 from urllib.request import urlopen
 from urllib.parse import quote
 
@@ -39,7 +41,12 @@ def main() -> int:
                         help="folder where the MIOClient library is created")
     parser.add_argument("--github-ref",
                         help="fetch canonical files from this GitHub branch, tag, or commit")
+    parser.add_argument("--version", default="0.1.0",
+                        help="Arduino library version to write to library.properties (default: 0.1.0)")
     args = parser.parse_args()
+    if not re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+", args.version):
+        parser.error("--version must use MAJOR.MINOR.PATCH, for example 0.1.0")
+
     output = Path(args.output_directory).expanduser().resolve() / "MIOClient"
     if output.exists():
         print(f"refusing to overwrite existing directory: {output}",
@@ -65,7 +72,7 @@ def main() -> int:
 
     (output / "library.properties").write_text(
         "name=MIOClient\n"
-        "version=0.1.0\n"
+        f"version={args.version}\n"
         "author=MIO Project\n"
         "maintainer=MIO Project\n"
         "sentence=Framework-friendly client for modular CAN I/O nodes.\n"

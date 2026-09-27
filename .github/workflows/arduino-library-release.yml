@@ -1,0 +1,33 @@
+name: Arduino library release
+
+on:
+  push:
+    tags:
+      - "arduino-v*"
+
+permissions:
+  contents: write
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out tagged source
+        uses: actions/checkout@v4
+
+      - name: Build Arduino IDE library package
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+          PACKAGE_OUTPUT: ${{ runner.temp }}
+        run: |
+          version="${RELEASE_TAG#arduino-v}"
+          python3 SHARED/tools/package_arduino.py "$PACKAGE_OUTPUT" --version "$version"
+          cd "$PACKAGE_OUTPUT"
+          zip -qr MIOClient.zip MIOClient
+
+      - name: Attach package to the GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: MIOClient ${{ github.ref_name }}
+          generate_release_notes: true
+          files: ${{ runner.temp }}/MIOClient.zip

@@ -52,7 +52,7 @@ void loop() {
     }
 
     // Channel 0: digital output; channel 1: 1 kHz PWM at 12.50%;
-    // channel 2: slow PWM with a 25.0-second period; channel 3: 1-second pulse.
+    // channel 2: slow PWM with a 25.0-second period; channel 3: SG90 servo.
     io.set(DO4_NODE, 0, MIO_PROP_MODE, MIO_OUTPUT_DIGITAL);
     io.set(DO4_NODE, 1, MIO_PROP_MODE, MIO_OUTPUT_PWM);
     io.set(DO4_NODE, 1, MIO_PROP_FREQUENCY, 1000);
@@ -60,15 +60,18 @@ void loop() {
     io.set(DO4_NODE, 2, MIO_PROP_MODE, MIO_OUTPUT_SLOW_PWM);
     io.set(DO4_NODE, 2, MIO_PROP_PERIOD, 250); // 25.0 seconds
     io.set(DO4_NODE, 2, MIO_PROP_DUTY, 5000);  // 50.00 percent
-    io.set(DO4_NODE, 3, MIO_PROP_MODE, MIO_OUTPUT_PULSE);
-    io.set(DO4_NODE, 3, MIO_PROP_PULSE_MS, 1000);
+    io.set(DO4_NODE, 3, MIO_PROP_MODE, MIO_OUTPUT_PWM);
+    io.set(DO4_NODE, 3, MIO_PROP_FREQUENCY, 50);
+    io.setPwmDuty(DO4_NODE, 3, 7.50f); // 1.50 ms pulse: nominal midpoint
 
     // After application safety checks, enable channel 1 explicitly with:
     // io.setOutput(DO4_NODE, 1, true);
     // Update its duty while enabled with:
     // io.setPwmDuty(DO4_NODE, 1, 37.25f);
-    // Start channel 3's locally timed pulse with:
-    // io.set(DO4_NODE, 3, MIO_PROP_TRIGGER, 1);
+    // After checking the linkage's safe travel, enable the servo with:
+    // io.setOutput(DO4_NODE, 3, true);
+    // Move it while enabled with io.setPwmDuty(DO4_NODE, 3, 5.00f) through
+    // io.setPwmDuty(DO4_NODE, 3, 12.50f); tune limits for your servo/linkage.
     configured_boot_id = node->status.boot_id;
     have_configured_boot_id = true;
   }

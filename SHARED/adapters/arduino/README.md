@@ -4,9 +4,22 @@
 ESP-IDF. It uses the ESP32's on-chip TWAI controller and needs the external CAN
 transceiver. The initial adapter supports 250, 500 and 1000 kbit/s.
 
-The sources and examples are hosted at
-[Weyla/MECS](https://github.com/Weyla/MECS). Download the package script and
-assemble a library from the GitHub `main` branch:
+## Install in Arduino IDE
+
+Download `MIOClient.zip` from the latest
+[Arduino library release](https://github.com/Weyla/MECS/releases/latest), then
+in Arduino IDE choose **Sketch → Include Library → Add .ZIP Library…** and
+select the downloaded ZIP. The IDE installs the library and its `BasicMaster`
+example; no terminal commands are needed. Open it from **File → Examples →
+MIOClient → BasicMaster**.
+
+If the releases page does not contain `MIOClient.zip` yet, the first versioned
+Arduino package release has not been published. The release workflow builds
+the installable ZIP from these canonical sources whenever a maintainer pushes
+an `arduino-vMAJOR.MINOR.PATCH` tag.
+
+For development, the package script can still assemble a library locally, or
+fetch canonical files directly from a GitHub ref:
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/Weyla/MECS/main/SHARED/tools/package_arduino.py \
@@ -14,9 +27,9 @@ curl -fsSL https://raw.githubusercontent.com/Weyla/MECS/main/SHARED/tools/packag
 python3 /tmp/package_arduino.py --github-ref main /tmp
 ```
 
-The script creates `/tmp/MIOClient`; zip that folder or copy it to the Arduino
-libraries directory. The library includes the canonical `mio_core` and
-`mio_client` C sources so there is no second implementation to maintain.
+The script creates `/tmp/MIOClient`. The library includes the canonical
+`mio_core` and `mio_client` C sources so there is no second implementation to
+maintain.
 
 Example:
 
