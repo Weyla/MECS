@@ -1,4 +1,4 @@
-# Example master using the GitHub-hosted ESPHome MIO component.
+# Example master using the GitHub-hosted ESPHome MECS component.
 # DI4 remote channels map to GPIO0..3; CAN on the master uses GPIO4/5.
 # The DI4 firmware defaults to active-low, pull-up, stable debounce (20 ms),
 # and reports both periodically and on change (100 ms).
@@ -9,18 +9,16 @@
 # polarity controls are not yet exposed as ESPHome entities/actions.
 
 esphome:
-  name: mio-di4-master
-  friendly_name: MIO DI4 Input Example
+  name: mecs-di4-master
+  friendly_name: MECS DI4 Input Example
   includes:
-    - mio_components/mio_sources/mio.c
-    - mio_components/mio_sources/mio_io.c
-    - mio_components/mio_sources/mio_io_wire.c
-    - mio_components/mio_sources/mio_command.c
-    - mio_components/mio_sources/mio_client.c
-    - mio_components/mio_sources/mio.h
-    - mio_components/mio_sources/mio_io.h
-    - mio_components/mio_sources/mio_command.h
-    - mio_components/mio_sources/mio_client.h
+    - mecs_components/mecs_sources/mecs_protocol.c
+    - mecs_components/mecs_sources/mecs_io.c
+    - mecs_components/mecs_sources/mecs_io_wire.c
+    - mecs_components/mecs_sources/mecs_client.c
+    - mecs_components/mecs_sources/mecs_protocol.h
+    - mecs_components/mecs_sources/mecs_io.h
+    - mecs_components/mecs_sources/mecs_client.h
 
 esp32:
   board: esp32-c3-devkitm-1
@@ -47,14 +45,14 @@ external_components:
 
 canbus:
   - platform: esp32_can
-    id: mio_can
+    id: mecs_can
     can_id: 0
     tx_pin: GPIO4
     rx_pin: GPIO5
     bit_rate: 500kbps
 
-mio_expansion:
-  canbus_id: mio_can
+mecs_expansion:
+  canbus_id: mecs_can
   inputs:
     - name: "DI4 input 0 / GPIO0"
       node: 2

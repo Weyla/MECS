@@ -1,66 +1,60 @@
-# Arduino IDE adapter
+# MECS Arduino library
 
-`MIOClient` is the ESP32 Arduino facade over the same portable C client used by
-ESP-IDF. It uses the ESP32's on-chip TWAI controller and needs the external CAN
-transceiver. The initial adapter supports 250, 500 and 1000 kbit/s.
+`MECSClient` connects an ESP32 Arduino sketch to expansion nodes using the
+on-chip TWAI controller and an external CAN transceiver. Supported bitrates
+are 250, 500 (default), and 1000 kbit/s. The recovery and node/pin logic is
+shared portable C/C++; the web server is not included.
 
-## Install in Arduino IDE
+## Install
 
-Download `MIOClient.zip` from the latest
-[Arduino library release](https://github.com/Weyla/MECS/releases/latest), then
-in Arduino IDE choose **Sketch → Include Library → Add .ZIP Library…** and
-select the downloaded ZIP. The IDE installs the library and its `BasicMaster`
-example; no terminal commands are needed. Open it from **File → Examples →
-MIOClient → BasicMaster**.
-
-If the releases page does not contain `MIOClient.zip` yet, the first versioned
-Arduino package release has not been published. The release workflow builds
-the installable ZIP from these canonical sources whenever a maintainer pushes
-an `arduino-vMAJOR.MINOR.PATCH` tag.
-
-For development, the package script can still assemble a library locally, or
-fetch canonical files directly from a GitHub ref:
-
-```sh
-curl -fsSL https://raw.githubusercontent.com/Weyla/MECS/main/SHARED/tools/package_arduino.py \
-  -o /tmp/package_arduino.py
-python3 /tmp/package_arduino.py --github-ref main /tmp
-```
-
-The script creates `/tmp/MIOClient`. The library includes the canonical
-`mio_core` and `mio_client` C sources so there is no second implementation to
-maintain.
-
-Example:
+Install `MECSClient.zip` using **Sketch → Include Library → Add .ZIP Library…**.
+A locally built archive is available in `dist/` when the maintainer packages a
+release. Published packages are available from the
+[MECS releases page](https://github.com/Weyla/MECS/releases) once uploaded.
+Open **File → Examples → MECSClient → ServoRecovery** for the single-output-node
+servo test, or **BasicMaster** for input-controlled PWM. **DO4** and **DI4** show
+all four channels and their options. ESP32-C3 native USB serial needs **USB CDC
+On Boot → Enabled**.
 
 ```cpp
-#include <MIOClient.h>
-#include <Preferences.h>
-
-MIOClient io;
+#include <MECSClient.h>
+MECSClient can;
+auto outputs = can.node(1);
+auto servo = outputs.pin(3);
 
 void setup() {
   Serial.begin(115200);
-  // CAN TX/RX are project wiring choices; 500 kbit/s matches the test bus.
-  if (!io.begin(4, 5, onMioEvent)) {
-    Serial.println("MIO CAN startup failed");
-  }
+  can.enableLogging(Serial); // Optional; no callback required.
+  if (!can.begin(4, 5)) return; // Master CAN TX/RX.
+  servo.setPwm(50, 7.500);     // Selects PWM mode; Hz and duty percent.
+  servo.turnOn();
 }
 
 void loop() {
-  io.loop(); // Receives frames and services heartbeat/discovery/timeouts.
+  can.loop(); // Discovery, heartbeats, confirmations and recovery.
 }
 ```
 
-The Arduino facade persists a new master session at startup and rotates it
-when its transaction counter is exhausted. The event callback has the
-`mio_client_event_fn` signature. Call
-`setOutput(node, channel, enabled)` to change an output gate, then wait for the
-confirmed event. `setPwmDuty()` accepts percent with decimals, such as `12.5f`.
-Keep the callback short; it runs inside `io.loop()`.
+Settings can be registered before discovery. Repeating a setter does not send
+unchanged data. `ready()` means all requested settings are acknowledged;
+`online()` means fresh node status; input `valid()` distinguishes a current
+reading from a disconnected node. After a node reset the library restores the
+last requested settings, then the explicit enable state. Missing heartbeats
+still make node outputs inactive.
 
-The customer sketch is available at
-[`examples/arduino/BasicMaster/BasicMaster.ino`](https://github.com/Weyla/MECS/blob/main/examples/arduino/BasicMaster/BasicMaster.ino).
-This adapter targets ESP32 Arduino cores exposing Espressif's `driver/twai.h`
-legacy driver API. Compile it against the Arduino-ESP32 version selected for
-the product before claiming support for additional core releases.
+Three-decimal duty and configurable reporting minimum require node firmware
+0.3.1. This package provides one supported `MECSClient` API and one Arduino
+TWAI transport. Remove any earlier duplicate library installation if Arduino
+reports ambiguous libraries.
+
+The [MECS API manual](https://github.com/Weyla/MECS/blob/main/SHARED/docs/MECS_API.md)
+describes argument ranges, reporting, validity, failures and acceptance testing.
+The facade builds against Arduino-ESP32 3.3.11 on ESP32-C3; additional boards
+and core releases require their own build and hardware checks.
+
+## Package from canonical source
+
+From a checkout, run `python3 SHARED/tools/package_arduino.py /tmp/package`.
+This creates `/tmp/package/MECSClient`; ZIP that directory for Arduino IDE.
+`--github-ref <tag-or-commit>` instead retrieves sources from that GitHub ref.
+The release workflow packages tags named `arduino-vMAJOR.MINOR.PATCH`.

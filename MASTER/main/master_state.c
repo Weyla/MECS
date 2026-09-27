@@ -2,8 +2,7 @@
 #include "esp_log.h"
 #include "esp_timer.h"
 #include "master_internal.h"
-#include "mio_can.h"
-#include "mio_command.h"
+#include "mecs_can.h"
 #include "nvs.h"
 #include <stdarg.h>
 #include <stdio.h>
@@ -15,9 +14,10 @@ unsigned log_next, log_used;
 uint32_t log_sequence;
 SemaphoreHandle_t mutex;
 QueueHandle_t commands;
-mio_t discovery;
+mecs_t discovery;
 uint16_t session, transaction;
 bool discover_pending;
+bool heartbeat_pending;
 master_pending_t pending;
 
 /* Persist the master session before use. Consecutive master boots therefore
@@ -26,9 +26,21 @@ master_pending_t pending;
  * protocol limit. */
 uint16_t master_next_session(void) {
   nvs_handle_t handle;
-  ESP_ERROR_CHECK(nvs_open("mio", NVS_READWRITE, &handle));
+  ESP_ERROR_CHECK(nvs_open("mecs", NVS_READWRITE, &handle));
   uint16_t previous = 0;
   esp_err_t error = nvs_get_u16(handle, "session", &previous);
+  if (error == ESP_ERR_NVS_NOT_FOUND) {
+    /* Read the old MIO namespace once during migration. If a node is still
+     * powered, the first new heartbeat must differ from the active session. */
+    nvs_handle_t previous_handle;
+    const esp_err_t opened = nvs_open("mio", NVS_READONLY, &previous_handle);
+    if (opened == ESP_OK) {
+      error = nvs_get_u16(previous_handle, "session", &previous);
+      nvs_close(previous_handle);
+    } else if (opened != ESP_ERR_NVS_NOT_FOUND) {
+      error = opened;
+    }
+  }
   ESP_ERROR_CHECK(error == ESP_ERR_NVS_NOT_FOUND ? ESP_OK : error);
   uint16_t next = previous == UINT16_MAX ? 1 : previous + 1;
   ESP_ERROR_CHECK(nvs_set_u16(handle, "session", next));
@@ -75,11 +87,35 @@ bool master_online(const node_view_t *n, uint32_t now) {
          (uint32_t)(now - n->status_ms) < MASTER_ONLINE_MS;
 }
 unsigned master_slot(uint8_t channel) {
-  return channel == MIO_GLOBAL_CHANNEL ? MIO_CHANNELS : channel;
+  return channel == MECS_GLOBAL_CHANNEL ? MECS_CHANNELS : channel;
 }
 
-void master_discovered(void *context, const mio_identity_t *identity,
-                       mio_announce_reason_t reason) {
+/* The owner holds mutex while handling announcements and status frames, so
+ * command producers cannot race this bounded queue rebuild. Preserve commands
+ * for every other node when one node restarts. */
+static void cancel_node_commands(uint8_t address) {
+  if (!commands) return;
+
+  command_t retained[MASTER_COMMAND_QUEUE_LENGTH];
+  UBaseType_t retained_count = 0;
+  const UBaseType_t queued = uxQueueMessagesWaiting(commands);
+  for (UBaseType_t i = 0; i < queued; ++i) {
+    command_t command;
+    if (xQueueReceive(commands, &command, 0) != pdTRUE) break;
+    if (command.node != address) retained[retained_count++] = command;
+  }
+
+  xQueueReset(commands);
+  for (UBaseType_t i = 0; i < retained_count; ++i) {
+    if (xQueueSend(commands, &retained[i], 0) != pdTRUE) {
+      master_note("Could not restore queued command for node %u",
+                  retained[i].node);
+    }
+  }
+}
+
+void master_discovered(void *context, const mecs_identity_t *identity,
+                       mecs_announce_reason_t reason) {
   (void)context;
   node_view_t *n = master_lookup(identity->node_id);
   if (!n) {
@@ -96,11 +132,12 @@ void master_discovered(void *context, const mio_identity_t *identity,
     }
   }
   bool reset = !n->used || n->identity.board_type != identity->board_type ||
-               reason == MIO_ANNOUNCE_BOOT;
+               reason == MECS_ANNOUNCE_BOOT;
   if (reset) {
-    /* A boot invalidates queued intentions as well as old readback. */
+    heartbeat_pending = true;
+    /* A boot invalidates this node's queued intentions and old readback. */
     if (n->used) {
-      xQueueReset(commands);
+      cancel_node_commands(identity->node_id);
     }
     memset(n, 0, sizeof(*n));
     n->used = true;
@@ -109,7 +146,6 @@ void master_discovered(void *context, const mio_identity_t *identity,
       master_note("Node %u rebooted; pending transaction cancelled",
                   identity->node_id);
       pending.active = false;
-      xQueueReset(commands);
     }
     master_note("Node %u announced: board=%u firmware=%u.%u.%u",
                 identity->node_id, identity->board_type,
@@ -121,11 +157,12 @@ void master_discovered(void *context, const mio_identity_t *identity,
 }
 
 bool master_global_property(unsigned property) {
-  return property == MIO_PROP_REPORT || property == MIO_PROP_REPORT_MS;
+  return property == MECS_PROP_REPORT || property == MECS_PROP_REPORT_MS ||
+         property == MECS_PROP_REPORT_MIN_MS;
 }
 uint8_t master_role_of(const node_view_t *n) {
-  return n->identity.board_type == MIO_BOARD_DI4   ? 1
-         : n->identity.board_type == MIO_BOARD_DO4 ? 2
+  return n->identity.board_type == MECS_BOARD_DI4   ? 1
+         : n->identity.board_type == MECS_BOARD_DO4 ? 2
                                                    : 0;
 }
 
@@ -139,17 +176,17 @@ static bool background_read(command_t *out, uint32_t now) {
         !master_role_of(n)) {
       continue;
     }
-    while (n->refresh_cursor < (MIO_CHANNELS + 1) * MIO_PROP_COUNT) {
+    while (n->refresh_cursor < (MECS_CHANNELS + 1) * MECS_PROP_COUNT) {
       unsigned index = n->refresh_cursor++;
-      unsigned ch = index / MIO_PROP_COUNT, p = index % MIO_PROP_COUNT;
-      if (!p || p == MIO_PROP_TRIGGER ||
-          !(mio_properties[p].roles & master_role_of(n)) ||
-          master_global_property(p) != (ch == MIO_CHANNELS)) {
+      unsigned ch = index / MECS_PROP_COUNT, p = index % MECS_PROP_COUNT;
+      if (!p || p == MECS_PROP_TRIGGER ||
+          !(mecs_properties[p].roles & master_role_of(n)) ||
+          master_global_property(p) != (ch == MECS_CHANNELS)) {
         continue;
       }
       *out = (command_t){n->identity.node_id,
-                         ch == MIO_CHANNELS ? MIO_GLOBAL_CHANNEL : ch,
-                         p | MIO_READ_FLAG, 0};
+                         ch == MECS_CHANNELS ? MECS_GLOBAL_CHANNEL : ch,
+                         p | MECS_READ_FLAG, 0};
       return true;
     }
     n->refreshing = false;
@@ -157,13 +194,13 @@ static bool background_read(command_t *out, uint32_t now) {
   return false;
 }
 
-void master_accept_frame(const mio_frame_t *frame, uint32_t now) {
+void master_accept_frame(const mecs_frame_t *frame, uint32_t now) {
   uint8_t address;
-  mio_io_reply_t reply;
-  mio_io_status_t status;
-  mio_pwm_measurement_t measurement;
+  mecs_io_reply_t reply;
+  mecs_io_status_t status;
+  mecs_pwm_measurement_t measurement;
   uint8_t channel;
-  if (mio_io_decode_reply(frame, &address, &reply)) {
+  if (mecs_io_decode_reply(frame, &address, &reply)) {
     if (!pending.active || address != pending.command.node ||
         reply.session != session ||
         reply.transaction != pending.request.transaction ||
@@ -171,46 +208,64 @@ void master_accept_frame(const mio_frame_t *frame, uint32_t now) {
       return;
     }
     node_view_t *n = master_lookup(address);
-    unsigned p = reply.property & ~MIO_READ_FLAG;
-    if (reply.error == MIO_OK && n) {
+    unsigned p = reply.property & ~MECS_READ_FLAG;
+    if ((reply.error == MECS_ERR_SESSION || reply.error == MECS_ERR_OFFLINE) &&
+        pending.attempts < 3) {
+      heartbeat_pending = true;
+      return; /* Repair the lease, then retry within the original deadline. */
+    }
+    if (reply.error == MECS_OK && n) {
       n->values[master_slot(pending.command.channel)][p] = reply.value;
       n->valid[master_slot(pending.command.channel)] |= 1u << p;
-      if (pending.user_requested || !(reply.property & MIO_READ_FLAG)) {
-        const mio_property_info_t *info = &mio_properties[p];
+      /* The two duty properties address the same setting. A legacy CLI write
+       * must also update the precise duty shown by the test dashboard. */
+      const unsigned channel_slot = master_slot(pending.command.channel);
+      if (p == MECS_PROP_DUTY_PRECISE) {
+        n->values[channel_slot][MECS_PROP_DUTY] = (reply.value + 5u) / 10u;
+        n->valid[channel_slot] |= 1u << MECS_PROP_DUTY;
+      } else if (p == MECS_PROP_DUTY && !(reply.property & MECS_READ_FLAG)) {
+        n->values[channel_slot][MECS_PROP_DUTY_PRECISE] = reply.value * 10u;
+        n->valid[channel_slot] |= 1u << MECS_PROP_DUTY_PRECISE;
+      }
+      if (pending.user_requested || !(reply.property & MECS_READ_FLAG)) {
+        const mecs_property_info_t *info = &mecs_properties[p];
         char value_text[24];
-        if (info->scale == 100) {
-          snprintf(value_text, sizeof(value_text), "%u.%02u", reply.value / 100,
-                   reply.value % 100);
+        if (info->scale == 1000) {
+          snprintf(value_text, sizeof(value_text), "%lu.%03lu",
+                   (unsigned long)(reply.value / 1000),
+                   (unsigned long)(reply.value % 1000));
+        } else if (info->scale == 100) {
+          snprintf(value_text, sizeof(value_text), "%u.%02u", (unsigned)(reply.value / 100),
+                   (unsigned)(reply.value % 100));
         } else if (info->scale == 10) {
-          snprintf(value_text, sizeof(value_text), "%u.%u", reply.value / 10,
-                   reply.value % 10);
+          snprintf(value_text, sizeof(value_text), "%u.%u", (unsigned)(reply.value / 10),
+                   (unsigned)(reply.value % 10));
         } else {
-          snprintf(value_text, sizeof(value_text), "%u", reply.value);
+          snprintf(value_text, sizeof(value_text), "%u", (unsigned)reply.value);
         }
         master_note("Confirmed node %u channel %u %s=%s %s", address,
                     pending.command.channel, info->name, value_text,
                     info->unit);
       }
     } else {
-      master_note("Node %u rejected %s: %s", address, mio_properties[p].name,
-                  mio_error_name(reply.error));
+      master_note("Node %u rejected %s: %s", address, mecs_properties[p].name,
+                  mecs_error_name(reply.error));
     }
     pending.active = false;
-  } else if (mio_io_decode_status(frame, &address, &status)) {
+  } else if (mecs_io_decode_status(frame, &address, &status)) {
     node_view_t *n = master_lookup(address);
     if (!n) {
       discover_pending = true;
       return;
     }
     if (n->status_seen && n->status.boot_id != status.boot_id) {
-      xQueueReset(commands);
+      cancel_node_commands(address);
       memset(n->valid, 0, sizeof(n->valid));
       memset(n->measurement, 0, sizeof(n->measurement));
       n->refresh_cursor = 0;
       n->refreshing = true;
       if (pending.active && pending.command.node == address) {
         pending.active = false;
-        xQueueReset(commands);
       }
       master_note("Node %u boot identity changed; refreshing settings",
                   address);
@@ -219,27 +274,30 @@ void master_accept_frame(const mio_frame_t *frame, uint32_t now) {
     n->status = status;
     n->status_seen = true;
     n->status_ms = now;
+    if (!status.master_alive) {
+      heartbeat_pending = true;
+    }
     if (!was_online) {
       n->refreshing = true;
       n->refresh_cursor = 0;
       master_note("Node %u online", address);
     }
     /* Volatile state is authoritative in status, not an old command ACK. */
-    if (n->identity.board_type == MIO_BOARD_DO4) {
-      for (unsigned ch = 0; ch < MIO_CHANNELS; ++ch) {
-        n->values[ch][MIO_PROP_VALUE] = (status.logical >> ch) & 1;
-        n->valid[ch] |= 1u << MIO_PROP_VALUE;
+    if (n->identity.board_type == MECS_BOARD_DO4) {
+      for (unsigned ch = 0; ch < MECS_CHANNELS; ++ch) {
+        n->values[ch][MECS_PROP_VALUE] = (status.logical >> ch) & 1;
+        n->valid[ch] |= 1u << MECS_PROP_VALUE;
       }
     }
-  } else if (mio_io_decode_measurement(frame, &address, &channel,
+  } else if (mecs_io_decode_measurement(frame, &address, &channel,
                                        &measurement)) {
     node_view_t *n = master_lookup(address);
-    if (n && n->identity.board_type == MIO_BOARD_DI4) {
+    if (n && n->identity.board_type == MECS_BOARD_DI4) {
       n->measurement[channel] = measurement;
       n->measurement_ms[channel] = now;
     }
   } else {
-    (void)mio_receive(&discovery, frame);
+    (void)mecs_receive(&discovery, frame);
   }
 }
 
@@ -267,7 +325,7 @@ void master_transactions(uint32_t now) {
     }
     pending.user_requested = user_requested;
     pending.command = command;
-    pending.request = (mio_io_request_t){command.property, command.channel,
+    pending.request = (mecs_io_request_t){command.property, command.channel,
                                          ++transaction, session, command.value};
     pending.active = true;
     pending.attempts = 0;
@@ -283,7 +341,7 @@ void master_transactions(uint32_t now) {
     node_view_t *n = master_lookup(pending.command.node);
     if (n) {
       n->valid[master_slot(pending.command.channel)] &=
-          ~(1u << (pending.command.property & ~MIO_READ_FLAG));
+          ~(1u << (pending.command.property & ~MECS_READ_FLAG));
     }
     /* Do not run later queued output actions after an uncertain result. */
     xQueueReset(commands);
@@ -292,9 +350,9 @@ void master_transactions(uint32_t now) {
   }
   if (!pending.attempts ||
       (uint32_t)(now - pending.sent_ms) >= MASTER_COMMAND_TIMEOUT_MS) {
-    mio_frame_t frame;
-    if (mio_io_encode_request(pending.command.node, &pending.request, &frame) &&
-        mio_can_send(NULL, &frame)) {
+    mecs_frame_t frame;
+    if (mecs_io_encode_request(pending.command.node, &pending.request, &frame) &&
+        mecs_can_send(NULL, &frame)) {
       ++pending.attempts;
       pending.sent_ms = now;
     }

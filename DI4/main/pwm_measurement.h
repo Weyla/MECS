@@ -1,6 +1,6 @@
 #pragma once
 
-#include "mio_io.h"
+#include "mecs_io.h"
 
 /* DI4-local state used to turn electrical GPIO edges into a CAN measurement. */
 typedef struct {
@@ -15,5 +15,5 @@ typedef struct {
 } di4_pwm_capture_t;
 
 void di4_pwm_edge(di4_pwm_capture_t *capture, bool pin_high, uint32_t now_us);
-mio_pwm_measurement_t di4_pwm_measure(di4_pwm_capture_t *capture,
+mecs_pwm_measurement_t di4_pwm_measure(di4_pwm_capture_t *capture,
                                       bool active_low, uint32_t now_us);

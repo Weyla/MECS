@@ -1,4 +1,4 @@
-# Example master using the GitHub-hosted ESPHome MIO component.
+# Example master using the GitHub-hosted ESPHome MECS component.
 # DO4 remote channels map to GPIO0..3; CAN on the master uses GPIO4/5.
 # Settings supported by the node: active-high/low; digital/PWM/timed-pulse/
 # slow-PWM modes; frequency 10..10000 Hz; duty 0..100% at 0.01% resolution;
@@ -8,18 +8,16 @@
 # settings are not exposed by this adapter yet.
 
 esphome:
-  name: mio-do4-master
-  friendly_name: MIO DO4 Output Example
+  name: mecs-do4-master
+  friendly_name: MECS DO4 Output Example
   includes:
-    - mio_components/mio_sources/mio.c
-    - mio_components/mio_sources/mio_io.c
-    - mio_components/mio_sources/mio_io_wire.c
-    - mio_components/mio_sources/mio_command.c
-    - mio_components/mio_sources/mio_client.c
-    - mio_components/mio_sources/mio.h
-    - mio_components/mio_sources/mio_io.h
-    - mio_components/mio_sources/mio_command.h
-    - mio_components/mio_sources/mio_client.h
+    - mecs_components/mecs_sources/mecs_protocol.c
+    - mecs_components/mecs_sources/mecs_io.c
+    - mecs_components/mecs_sources/mecs_io_wire.c
+    - mecs_components/mecs_sources/mecs_client.c
+    - mecs_components/mecs_sources/mecs_protocol.h
+    - mecs_components/mecs_sources/mecs_io.h
+    - mecs_components/mecs_sources/mecs_client.h
 
 esp32:
   board: esp32-c3-devkitm-1
@@ -46,14 +44,14 @@ external_components:
 
 canbus:
   - platform: esp32_can
-    id: mio_can
+    id: mecs_can
     can_id: 0
     tx_pin: GPIO4
     rx_pin: GPIO5
     bit_rate: 500kbps
 
-mio_expansion:
-  canbus_id: mio_can
+mecs_expansion:
+  canbus_id: mecs_can
   outputs:
     - name: "DO4 output 0 / GPIO0"
       node: 1

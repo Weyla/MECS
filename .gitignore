@@ -3,7 +3,6 @@
 **/sdkconfig
 **/sdkconfig.old
 **/dependencies.lock
-!examples/esp-idf/master_client/dependencies.lock
 **/managed_components/
 
 # Host test output
@@ -11,8 +10,8 @@
 /build-host/
 
 # Generated ESPHome package (recreate with the documented packager)
-/examples/esphome/mio_components/
-**/examples/esphome/mio_components/
+/examples/esphome/mecs_components/
+**/examples/esphome/mecs_components/
 
 # Editor and operating-system metadata
 .DS_Store
@@ -22,3 +21,6 @@ __pycache__/
 .esphome/
 *.swp
 *.swo
+
+# Local installable release artifacts
+/dist/

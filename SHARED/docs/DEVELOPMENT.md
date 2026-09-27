@@ -2,10 +2,10 @@
 
 | Document control | Value |
 |---|---|
-| Document ID | MIO-DEV-001 |
-| Revision / date | 3.1 / 2026-09-27 |
-| Software / wire | 0.3.0 / 3 |
-| Audience | Firmware developers familiar with Arduino-style sketches |
+| Document ID | MECS-DEV-001 |
+| Revision / date | 3.2 / 2026-09-27 |
+| Firmware / wire | 0.3.1 / 3 |
+| Audience | Developers extending the board firmware and master client |
 
 ## 1. Project map
 
@@ -27,32 +27,38 @@ you are changing.
 | `DI4/main/main.c` | Input identity, pin map, boot setup and measurement loop |
 | `DI4/main/input_hardware.c` | DI4 GPIO setup and edge timestamping |
 | `DI4/main/pwm_measurement.c` | DI4-only edge-to-period/duty calculation |
-| `SHARED/components/mio_core` | Portable discovery, typed I/O model, measurement wire codec and command parser |
-| `SHARED/components/mio_client` | Portable master client API and cached node state |
-| `SHARED/components/mio_espidf` | ESP-IDF CAN/TWAI driver adapter |
+| `SHARED/components/mecs_core` | Portable discovery, typed I/O model and measurement wire codec |
+| `SHARED/components/mecs_command` | Test-master serial/web command grammar |
+| `SHARED/components/mecs_client` | Portable master client API and cached node state |
+| `SHARED/components/mecs_espidf` | ESP-IDF CAN/TWAI driver, shared by master and node firmware |
+| `SHARED/components/mecs_espidf_client` | Master-only `MECSClient` adapter with NVS sessions and owner loop |
 | `SHARED/docs` | Product manuals and protocol reference |
 
 Each board has a separate ESP-IDF project and separate `sdkconfig`. Each project
 points to `../SHARED/components` from its top-level CMake file. This keeps the
 build targets independent while sharing the same libraries.
 
+The firmware uses ESP-IDF 5.5 or newer because its CAN transport uses the
+on-chip TWAI node API. GitHub Actions builds all three fixed firmware projects
+with the minimum supported release.
+
 ## 2. Read a node from startup
 
 Open `DI4/main/main.c` or `DO4/main/main.c`. Near the top, each file lists the
 node address, board type, firmware version, CAN pins and four local GPIO pins.
-The `mio_identity_t` in `app_main()` repeats the identity fields that go onto
+The `mecs_identity_t` in `app_main()` repeats the identity fields that go onto
 the bus. This deliberate repetition makes it easy to compare the board label,
 local wiring and announced values.
 
 Startup then follows a visible sequence:
 
-1. `mio_io_node_init()` creates the portable channel settings and binds
+1. `mecs_io_node_init()` creates the portable channel settings and binds
    the local input/output function for applying a property.
 2. DI4 installs GPIO edge handlers; DO4 prepares its output pins when applying each channel.
 3. Each channel is initialized to its safe inactive/input state.
-4. `mio_init()` stores this board's identity and the shared CAN send callback.
-5. `mio_can_start()` starts the CAN controller.
-6. `mio_announce(..., MIO_ANNOUNCE_BOOT)` sends this board's identity.
+4. `mecs_init()` stores this board's identity and the shared CAN send callback.
+5. `mecs_can_start()` starts the CAN controller.
+6. `mecs_announce(..., MECS_ANNOUNCE_BOOT)` sends this board's identity.
 
 The node main loop runs every nominal millisecond. It samples its pins, advances
 local filtering/pulse/slow-PWM state, polls CAN recovery and processes received
@@ -61,20 +67,20 @@ sends the latest captured period and duty after status.
 
 ## 3. Trace the discovery request
 
-A master calls `mio_request_discovery()`; the shared function constructs a
+A master calls `mecs_request_discovery()`; the shared function constructs a
 standard CAN data frame with identifier `0x080` and the protocol revision.
 The CAN driver copies the frame into its transmit slot.
 
-On DI4 or DO4, the receive loop calls `mio_is_discovery_request()`. That shared
+On DI4 or DO4, the receive loop calls `mecs_is_discovery_request()`. That shared
 helper checks frame type, identifier, payload size and revision. The board
 application then marks an announcement for sending and later calls
-`mio_announce(&protocol, MIO_ANNOUNCE_REQUEST)`. The `protocol` instance
-contains the identity that this board passed to `mio_init()`; the shared
+`mecs_announce(&protocol, MECS_ANNOUNCE_REQUEST)`. The `protocol` instance
+contains the identity that this board passed to `mecs_init()`; the shared
 announce function writes those identity fields into its node-specific CAN frame.
 This makes the request-to-response path visible in board code while keeping
 byte order and frame layout in one library.
 
-The master passes received announcements to `mio_receive()`. The core validates
+The master passes received announcements to `mecs_receive()`. The core validates
 the frame and calls the master's discovery callback with typed identity fields.
 The master copies that identity into its node registry.
 
@@ -90,10 +96,10 @@ the master heartbeat and the discovery broadcast.
 
 A property command is different. Its identifier is 0x200 plus the destination
 node address. For example, node 1 receives commands on 0x201 and node 2 on
-0x202. The board passes its own NODE_ADDRESS to mio_io_decode_request(). That
+0x202. The board passes its own NODE_ADDRESS to mecs_io_decode_request(). That
 shared decoder checks the exact identifier, standard-frame type, DLC, and
 nonzero transaction/session fields before decoding the payload. A command for
-another node returns false; the node does not pass it to mio_io_node_request()
+another node returns false; the node does not pass it to mecs_io_node_request()
 or change any channel state.
 
 The CAN controller therefore sees the bus frames, while software decides which
@@ -103,12 +109,13 @@ then matches replies to the outstanding node, transaction, session and property.
 
 ## 5. Follow an I/O setting
 
-A dashboard or serial command is parsed by `mio_command_parse()` into a typed
-property. The master queues the request and sends one transaction at a time.
-On the node, `mio_io_decode_request()` validates the frame, then
-`mio_io_node_request()` checks session, channel, property and value. It stages
+A dashboard or serial command is parsed by `mecs_command_parse()` from the
+`mecs_command` component into a typed property. The master queues the request
+and sends one transaction at a time.
+On the node, `mecs_io_decode_request()` validates the frame, then
+`mecs_io_node_request()` checks session, channel, property and value. It stages
 the new configuration, invokes the callback supplied by this board, and commits
-the value only if the hardware accepts it. `mio_io_encode_reply()` returns the
+the value only if the hardware accepts it. `mecs_io_encode_reply()` returns the
 confirmed value to the master.
 
 Inputs filter locally and only report processed values. DI4's input_hardware.c
@@ -118,19 +125,21 @@ encoder/decoder carries the completed result over CAN, not individual edges.
 
 ## 6. Shared library boundaries
 
-`mio_core` is portable C. It knows fixed message layouts and I/O rules, but does
+`mecs_core` is portable C. It knows fixed message layouts and I/O rules, but does
 not include ESP-IDF or call hardware directly. Node applications pass a send
-callback to `mio_init()` and a hardware-apply callback to the I/O model.
+callback to `mecs_init()` and a hardware-apply callback to the I/O model.
 
-`mio_client` is the public master-side C API. It owns discovery, the master
+`mecs_client` is the public master-side C API. It owns discovery, the master
 heartbeat, cached node state, and one acknowledged property request at a time.
-Read [CLIENT_API.md](CLIENT_API.md) before adding framework-specific code. The
+Read [MECS_CLIENT_API.md](MECS_CLIENT_API.md) before adding framework-specific code. The
 master web server is kept in `MASTER/` as a test application and is not a
 dependency of the public library.
 
-`mio_espidf` converts the portable `mio_frame_t` into ESP-IDF TWAI frames. It
-copies received data from its interrupt callback into a bounded queue. Board
-loops call `mio_can_receive()` and process frames outside the interrupt.
+`mecs_espidf` converts the portable `mecs_frame_t` into ESP-IDF TWAI frames. It
+copies received data from its interrupt callback into a bounded queue. The
+master-only `mecs_espidf_client` component wraps that transport with NVS session
+storage and the managed `MECSClient` API. Node firmware depends only on the
+transport and does not compile the master client.
 
 The board-local hardware callback then applies the staged setting. DO4 uses
 LEDC for frequency-based PWM and GPIO for digital or slow PWM transitions.
@@ -156,7 +165,7 @@ one without regenerating another board's configuration. Do not copy an
 application's `sdkconfig` to a different board project; the defaults and node
 identity differ.
 
-An STM32 port can reuse `mio_core` and provide a new CAN adapter and hardware
+An STM32 port can reuse `mecs_core` and provide a new CAN adapter and hardware
 callbacks. An Arduino-ESP32 TWAI facade and library-packaging script are in
 `SHARED/adapters/arduino` and `SHARED/tools/package_arduino.py`; test the
 generated library with the selected Arduino-ESP32 core before claiming a
@@ -165,3 +174,29 @@ capture and persistent channel settings remain future work. The ESPHome adapter
 source and package script are present, but still need a build/configuration
 check against the selected ESPHome release before it is treated as a supported
 integration.
+
+## Managed MECS client (0.2.0)
+
+Start with `SHARED/components/mecs_client/include/MECS.h` for the user-facing
+node/pin API. `MECS.cpp` owns a fixed table of requested properties, confirmed
+bits and the current node generation. Its scheduler sends one property at a
+time, confirms each reply, and writes output enable last. Arduino glue in
+`SHARED/adapters/arduino/MECSClient.cpp` supplies the clock, persistent session,
+TWAI driver and optional readable logging. No sketch callback is needed.
+
+The lower-level `mecs_client.c` still owns wire requests, heartbeat, registry,
+timeouts and retries. A generation changes when a node's applied state may
+have been lost. Pending requests from that node are cancelled; requests for
+other nodes keep their FIFO order. This separation lets Arduino, IDF and other
+framework adapters reuse the same recovery implementation.
+
+`test_mecs_client.c` contains the original error-6 regression. It drops the first
+heartbeat, sends all five servo setup requests, then verifies that the repaired
+session applies mode, frequency, duty and enable without restarting the master.
+`test_recovery.cpp` connects the real portable controller and node model through
+a simulated CAN transport and checks physical-model state under resets, loss,
+duplication, delayed replies and hardware rejection. It also checks that an
+explicit OFF during a disconnection overrides a previously requested ON.
+
+The three-decimal duty extension and the minimum report interval are specified
+in `PROTOCOL.md`; customer semantics and commissioning steps are in `MECS_API.md`.

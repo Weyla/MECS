@@ -17,7 +17,7 @@ library and examples are hosted at [Weyla/MECS](https://github.com/Weyla/MECS).
 
 The CAN bus is configured for 500 kbit/s. Use a CAN transceiver, common ground,
 and end-of-line termination at both ends. `node: 2` is the example node address;
-change it to match the node's `CONFIG_MIO_NODE_ID` if you reconfigure firmware.
+change it to match the node's `CONFIG_MECS_NODE_ID` if you reconfigure firmware.
 
 ## Input options
 
@@ -28,19 +28,20 @@ change it to match the node's `CONFIG_MIO_NODE_ID` if you reconfigure firmware.
 | Debounce | 1–1000 ms | 20 ms |
 | Input bias | Floating / pull-up / pull-down | Pull-up |
 | Reporting | Periodic / on change / both | Both |
-| Report interval | 20–500 ms | 100 ms |
+| Report maximum interval | 20–500 ms | 100 ms |
+| Change-report minimum gap | 0–500 ms | 20 ms |
 | PWM measurement | Period 90–1,000,000 µs; duty 0–100% | Off until filter is set to PWM; 10 kHz is within the test range |
 
 The filter and edge measurement run on DI4. The master receives filtered states
 or completed PWM measurements; it never receives every edge. Filter settings
 are per channel. Reporting mode and interval apply to the whole node.
-Settings are volatile on the node; the Arduino sketch reapplies its selected
-settings when the DI4 boot identifier changes.
+Settings are volatile on the node; the MECS library reapplies the sketch's selected settings after a DI4 reset.
+Use `valid()` before `value()` to distinguish a disconnected input from LOW.
 
 ## Examples
 
 - [Arduino IDE](arduino/di4.ino)
-- [ESP-IDF](esp-idf/configure_di4.c)
+- [ESP-IDF helper](esp-idf/configure_di4.cpp)
 - [ESPHome](esphome/di4.yaml)
 
 For ESPHome, fetch the required C sources from GitHub into the same folder as
@@ -61,7 +62,46 @@ does not yet expose the DI4 filter, polarity, pull, or reporting settings; those
 options are documented above and available through the portable client API in
 Arduino and ESP-IDF.
 
-The ESP-IDF file is a helper to add to a master application. Copy the Git
-dependency entries from [`esp-idf/idf_component.yml`](esp-idf/idf_component.yml)
-to that application's `main/idf_component.yml`, and call the helper after the
-node's boot identifier changes so its volatile settings are restored.
+The ESP-IDF files are helpers for a customer-written master application. Copy
+`configure_di4.cpp` and `configure_di4.h` into the application's `main`
+component, add the `.cpp` to that component's `SRCS`, and add
+`mecs_espidf_client` to its `REQUIRES`. Copy the component dependencies from
+[`esp-idf/idf_component.yml`](esp-idf/idf_component.yml) into the application
+manifest. After `can.begin(4, 5)`, create `auto inputs = can.node(2);` and call
+`configure_di4_inputs(inputs)` once. A `true` return means the settings were
+accepted by the local API; `can.loop()` sends them and processes acknowledgments.
+The managed client re-applies requested settings after a DI4 reset; no boot-ID
+handling is needed. Keep calling `can.loop()` from the owner task. For example:
+
+```cpp
+#include "MECSClient.h"
+#include "configure_di4.h"
+#include "esp_err.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+
+MECSClient can;
+MECSNode inputs = can.node(2);
+MECSPin button = inputs.pin(1);
+
+extern "C" void app_main(void) {
+  ESP_ERROR_CHECK(can.begin(4, 5));
+  ESP_ERROR_CHECK(configure_di4_inputs(inputs) ? ESP_OK : ESP_FAIL);
+  for (;;) {
+    can.loop();
+    if (button.valid() && button.value()) {
+      // The active-low button is pressed.
+    }
+    vTaskDelay(pdMS_TO_TICKS(5));
+  }
+}
+```
+
+The application's `main/CMakeLists.txt` must compile the helper and link the
+client component, for example:
+
+```cmake
+idf_component_register(SRCS "main.cpp" "configure_di4.cpp"
+                       INCLUDE_DIRS "."
+                       REQUIRES mecs_espidf_client freertos)
+```

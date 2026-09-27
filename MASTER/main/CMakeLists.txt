@@ -7,7 +7,7 @@ idf_component_register(
          "network.c"
          "web.c"
     INCLUDE_DIRS "."
-    REQUIRES mio_core mio_espidf esp_timer esp_hw_support esp_wifi esp_netif
+    REQUIRES mecs_core mecs_command mecs_espidf esp_timer esp_hw_support esp_wifi esp_netif
              esp_event nvs_flash esp_http_server
     EMBED_TXTFILES "index.html"
 )

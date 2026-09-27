@@ -7,46 +7,48 @@
 #include "freertos/semphr.h"
 #include "freertos/task.h"
 #include "master_internal.h"
-#include "mio.h"
-#include "mio_can.h"
-#include "mio_io.h"
+#include "mecs_protocol.h"
+#include "mecs_can.h"
+#include "mecs_io.h"
 
 void app_main(void) {
   mutex = xSemaphoreCreateRecursiveMutex();
-  commands = xQueueCreate(32, sizeof(command_t));
+  commands = xQueueCreate(MASTER_COMMAND_QUEUE_LENGTH, sizeof(command_t));
   ESP_ERROR_CHECK(mutex && commands ? ESP_OK : ESP_ERR_NO_MEM);
-  const mio_identity_t identity = {.node_id = 0};
+  const mecs_identity_t identity = {.node_id = 0};
   ESP_ERROR_CHECK(
-      mio_init(&discovery, identity, mio_can_send, master_discovered, NULL)
+      mecs_init(&discovery, identity, mecs_can_send, master_discovered, NULL)
           ? ESP_OK
           : ESP_FAIL);
-  ESP_ERROR_CHECK(mio_can_start(MASTER_CAN_TX_GPIO, MASTER_CAN_RX_GPIO));
+  ESP_ERROR_CHECK(mecs_can_start(MASTER_CAN_TX_GPIO, MASTER_CAN_RX_GPIO));
   network_start();
   session = master_next_session();
   web_start();
-  master_note("MIO 0.3.0: discovery + four-channel I/O. Type help.");
+  master_note("MECS 0.3.1: discovery + four-channel I/O. Type help.");
   discover_pending = true;
-  uint32_t last_heartbeat = master_now_ms() - MIO_HEARTBEAT_MS,
+  uint32_t last_heartbeat = master_now_ms() - MECS_HEARTBEAT_MS,
            last_discovery = master_now_ms();
   for (;;) {
     uint32_t now = master_now_ms();
     xSemaphoreTakeRecursive(mutex, portMAX_DELAY);
-    if (mio_can_poll()) {
+    if (mecs_can_poll()) {
       discover_pending = true;
+      heartbeat_pending = true;
     }
-    mio_frame_t frame;
-    for (unsigned i = 0; i < 32 && mio_can_receive(&frame); ++i) {
+    mecs_frame_t frame;
+    for (unsigned i = 0; i < 32 && mecs_can_receive(&frame); ++i) {
       master_accept_frame(&frame, now);
     }
     /* Heartbeat takes precedence so configuration browsing cannot starve
      * the node's master-alive lease. Retry whenever the TX slot is free. */
-    if ((uint32_t)(now - last_heartbeat) >= MIO_HEARTBEAT_MS) {
-      mio_io_encode_heartbeat(session, &frame);
-      if (mio_can_send(NULL, &frame)) {
+    if (heartbeat_pending || (uint32_t)(now - last_heartbeat) >= MECS_HEARTBEAT_MS) {
+      mecs_io_encode_heartbeat(session, &frame);
+      if (mecs_can_send(NULL, &frame)) {
         last_heartbeat = now;
+        heartbeat_pending = false;
       }
     } else if (discover_pending || (uint32_t)(now - last_discovery) >= 5000) {
-      if (mio_request_discovery(&discovery)) {
+      if (mecs_request_discovery(&discovery)) {
         discover_pending = false;
         last_discovery = now;
       }

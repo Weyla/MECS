@@ -1,6 +1,6 @@
 # ESPHome external component
 
-The ESPHome adapter binds the portable MIO client to ESPHome's configured
+The ESPHome adapter binds the portable MECS client to ESPHome's configured
 `canbus` component. It exposes mapped DI4 inputs as binary sensors and DO4
 outputs as switches. No user automation needs CAN identifiers or payloads.
 
@@ -16,22 +16,20 @@ python3 /tmp/package_esphome.py --github-ref main .
 
 Keep the generated sources beside the YAML file. A complete master
 configuration is maintained at
-[`examples/esphome/mio-master.yaml`](https://github.com/Weyla/MECS/blob/main/examples/esphome/mio-master.yaml).
+[`examples/esphome/mecs-master.yaml`](https://github.com/Weyla/MECS/blob/main/examples/esphome/mecs-master.yaml).
 
 ```yaml
 esphome:
-  name: mio-master
+  name: mecs-master
   # ESPHome compiles these portable C sources as C translation units.
   includes:
-    - mio_components/mio_sources/mio.c
-    - mio_components/mio_sources/mio_io.c
-    - mio_components/mio_sources/mio_io_wire.c
-    - mio_components/mio_sources/mio_command.c
-    - mio_components/mio_sources/mio_client.c
-    - mio_components/mio_sources/mio.h
-    - mio_components/mio_sources/mio_io.h
-    - mio_components/mio_sources/mio_command.h
-    - mio_components/mio_sources/mio_client.h
+    - mecs_components/mecs_sources/mecs_protocol.c
+    - mecs_components/mecs_sources/mecs_io.c
+    - mecs_components/mecs_sources/mecs_io_wire.c
+    - mecs_components/mecs_sources/mecs_client.c
+    - mecs_components/mecs_sources/mecs_protocol.h
+    - mecs_components/mecs_sources/mecs_io.h
+    - mecs_components/mecs_sources/mecs_client.h
 
 external_components:
   - source:
@@ -42,14 +40,14 @@ external_components:
 
 canbus:
   - platform: esp32_can
-    id: mio_can
+    id: mecs_can
     can_id: 0
     tx_pin: GPIO4
     rx_pin: GPIO5
     bit_rate: 500kbps
 
-mio_expansion:
-  canbus_id: mio_can
+mecs_expansion:
+  canbus_id: mecs_can
   inputs:
     - name: "DI4 input 1"
       node: 2
@@ -61,8 +59,14 @@ mio_expansion:
 ```
 
 The component increments and persists its session at boot. The ESPHome CAN bus
-already initializes the controller, so do not also start the `mio_espidf`
+already initializes the controller, so do not also start the `mecs_espidf`
 TWAI adapter.
+
+Mapped input binary sensors are invalidated to an unknown state when their node
+stops reporting. ESPHome switches do not support an unknown state, so a switch
+that was confirmed on is published off when its node goes offline. This only
+clears the displayed stale state; the node's own heartbeat-loss behavior
+returns its physical outputs to their configured inactive state.
 
 The Python schema and C++ component are an initial adapter and still need a
 compile/configuration check against the ESPHome release selected for the

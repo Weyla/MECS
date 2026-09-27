@@ -23,11 +23,11 @@ jobs:
           version="${RELEASE_TAG#arduino-v}"
           python3 SHARED/tools/package_arduino.py "$PACKAGE_OUTPUT" --version "$version"
           cd "$PACKAGE_OUTPUT"
-          zip -qr MIOClient.zip MIOClient
+          zip -qr MECSClient.zip MECSClient
 
       - name: Attach package to the GitHub release
         uses: softprops/action-gh-release@v2
         with:
-          name: MIOClient ${{ github.ref_name }}
+          name: MECSClient ${{ github.ref_name }}
           generate_release_notes: true
-          files: ${{ runner.temp }}/MIOClient.zip
+          files: ${{ runner.temp }}/MECSClient.zip

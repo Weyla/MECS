@@ -14,8 +14,8 @@ SCRIPT_PATH = Path(__file__).resolve()
 ROOT = next((parent for parent in SCRIPT_PATH.parents
              if (parent / "SHARED" / "components").is_dir()), Path.cwd())
 SHARED = ROOT / "SHARED"
-CORE = SHARED / "components" / "mio_core"
-CLIENT = SHARED / "components" / "mio_client"
+CORE = SHARED / "components" / "mecs_core"
+CLIENT = SHARED / "components" / "mecs_client"
 ADAPTER = SHARED / "adapters" / "arduino"
 
 
@@ -38,16 +38,16 @@ def copy_files(source_dir: Path, repository_dir: str, names: list[str],
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("output_directory",
-                        help="folder where the MIOClient library is created")
+                        help="folder where the MECSClient library is created")
     parser.add_argument("--github-ref",
                         help="fetch canonical files from this GitHub branch, tag, or commit")
-    parser.add_argument("--version", default="0.1.0",
-                        help="Arduino library version to write to library.properties (default: 0.1.0)")
+    parser.add_argument("--version", default="0.2.0",
+                        help="Arduino library version to write to library.properties (default: 0.2.0)")
     args = parser.parse_args()
     if not re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+", args.version):
-        parser.error("--version must use MAJOR.MINOR.PATCH, for example 0.1.0")
+        parser.error("--version must use MAJOR.MINOR.PATCH, for example 0.2.0")
 
-    output = Path(args.output_directory).expanduser().resolve() / "MIOClient"
+    output = Path(args.output_directory).expanduser().resolve() / "MECSClient"
     if output.exists():
         print(f"refusing to overwrite existing directory: {output}",
               file=sys.stderr)
@@ -55,40 +55,57 @@ def main() -> int:
 
     source = output / "src"
     source.mkdir(parents=True)
-    copy_files(CORE, "SHARED/components/mio_core",
-               ["mio.c", "mio_io.c", "mio_io_wire.c", "mio_command.c"],
+    copy_files(CORE, "SHARED/components/mecs_core",
+               ["mecs_protocol.c", "mecs_io.c", "mecs_io_wire.c"],
                source, args.github_ref)
-    copy_files(CORE / "include", "SHARED/components/mio_core/include",
-               ["mio.h", "mio_io.h", "mio_command.h"], source,
+    copy_files(CORE / "include", "SHARED/components/mecs_core/include",
+               ["mecs_protocol.h", "mecs_io.h"], source,
                args.github_ref)
-    copy_files(CLIENT, "SHARED/components/mio_client", ["mio_client.c"],
+    copy_files(CLIENT, "SHARED/components/mecs_client", ["mecs_client.c"],
                source, args.github_ref)
-    copy_files(CLIENT / "include", "SHARED/components/mio_client/include",
-               ["mio_client.h"], source, args.github_ref)
+    copy_files(CLIENT / "include", "SHARED/components/mecs_client/include",
+               ["mecs_client.h"], source, args.github_ref)
     copy_files(ADAPTER, "SHARED/adapters/arduino",
-               ["MIOArduinoTwai.h", "MIOArduinoTwai.cpp",
-                "MIOClient.h", "MIOClient.cpp"], source,
+               ["MECSTwaiTransport.h", "MECSTwaiTransport.cpp",
+                "MECSClient.h", "MECSClient.cpp"], source,
                args.github_ref)
 
+    copy_files(SHARED / "components" / "mecs_client", "SHARED/components/mecs_client",
+               ["MECS.cpp"], source, args.github_ref)
+    copy_files(SHARED / "components" / "mecs_client" / "include",
+               "SHARED/components/mecs_client/include", ["MECS.h"], source, args.github_ref)
+
     (output / "library.properties").write_text(
-        "name=MIOClient\n"
+        "name=MECSClient\n"
         f"version={args.version}\n"
-        "author=MIO Project\n"
-        "maintainer=MIO Project\n"
+        "author=MECS Project\n"
+        "maintainer=MECS Project\n"
         "sentence=Framework-friendly client for modular CAN I/O nodes.\n"
         "paragraph=Discover modules and use remote I/O without building CAN frames.\n"
         "category=Communication\n"
         "url=https://github.com/Weyla/MECS\n"
         "architectures=esp32\n"
-        "includes=MIOClient.h\n",
+        "includes=MECSClient.h\n",
         encoding="utf-8",
     )
     copy_files(ADAPTER, "SHARED/adapters/arduino", ["README.md"], output,
                args.github_ref)
     examples = output / "examples" / "BasicMaster"
     examples.mkdir(parents=True)
-    copy_files(ADAPTER, "SHARED/adapters/arduino", ["BasicMaster.ino"],
+    copy_files(ROOT / "examples" / "arduino" / "BasicMaster",
+               "examples/arduino/BasicMaster", ["BasicMaster.ino"],
                examples, args.github_ref)
+    for folder, repository_dir, filename in [
+        ("ServoRecovery", "examples/arduino/ServoRecovery", "ServoRecovery.ino"),
+        ("DO4", "DO4/examples/arduino", "do4.ino"),
+        ("DI4", "DI4/examples/arduino", "di4.ino"),
+    ]:
+        destination = output / "examples" / folder
+        destination.mkdir(parents=True)
+        copy_files(ROOT / repository_dir, repository_dir, [filename],
+                   destination, args.github_ref)
+        if filename != folder + ".ino":
+            (destination / filename).rename(destination / (folder + ".ino"))
     print(output)
     return 0
 

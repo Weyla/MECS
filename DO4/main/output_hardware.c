@@ -3,12 +3,13 @@
 #include "driver/gpio.h"
 #include "driver/ledc.h"
 
-static bool pwm_attached[MIO_CHANNELS];
-static bool gpio_configured[MIO_CHANNELS];
-static uint16_t pwm_frequency[MIO_CHANNELS];
-static bool pwm_polarity[MIO_CHANNELS];
+static bool pwm_attached[MECS_CHANNELS];
+static bool gpio_configured[MECS_CHANNELS];
+static gpio_num_t pwm_gpio[MECS_CHANNELS];
+static uint16_t pwm_frequency[MECS_CHANNELS];
+static bool pwm_polarity[MECS_CHANNELS];
 
-/* Release the LEDC channel and its GPIO matrix output before reusing the pin.
+/* Stop PWM and return its GPIO to normal GPIO control before reusing the pin.
  * LEDC's fade service is intentionally not used: output changes are immediate
  * and do not need a ramp. */
 static bool detach_pwm(uint8_t channel) {
@@ -16,32 +17,34 @@ static bool detach_pwm(uint8_t channel) {
     return true;
   }
 
-  if (ledc_stop(LEDC_LOW_SPEED_MODE, channel, 0) != ESP_OK) {
+  /* Keep the pin at its inactive physical level while LEDC releases it. */
+  const uint32_t inactive_level = pwm_polarity[channel] ? 1u : 0u;
+  if (ledc_stop(LEDC_LOW_SPEED_MODE, channel, inactive_level) != ESP_OK) {
     return false;
   }
 
-  const ledc_channel_config_t release = {
-      .speed_mode = LEDC_LOW_SPEED_MODE,
-      .channel = channel,
-      .deconfigure = true,
-  };
-  if (ledc_channel_config(&release) != ESP_OK) {
+  /* `ledc_channel_config_t.deconfigure` is not available in ESP-IDF 5.5.
+   * Resetting the routed pin releases the GPIO matrix; the stopped LEDC
+   * channel can be configured again when this output returns to PWM mode. */
+  if (gpio_reset_pin(pwm_gpio[channel]) != ESP_OK) {
     return false;
   }
 
   pwm_attached[channel] = false;
+  pwm_gpio[channel] = GPIO_NUM_NC;
+  gpio_configured[channel] = false;
   return true;
 }
 
 bool do4_apply_output(void *context, uint8_t channel,
-                      const mio_channel_config_t *config,
+                      const mecs_channel_config_t *config,
                       bool output_is_active) {
   (void)context;
 
   const bool enabled = output_is_active && config->value;
-  const bool should_use_pwm = enabled && config->mode == MIO_OUTPUT_PWM &&
-                              config->duty_percent_x100 > 0 &&
-                              config->duty_percent_x100 < 10000;
+  const bool should_use_pwm = enabled && config->mode == MECS_OUTPUT_PWM &&
+                              config->duty_percent_x1000 > 0 &&
+                              config->duty_percent_x1000 < 100000;
 
   if (should_use_pwm) {
     const uint32_t resolution =
@@ -51,7 +54,7 @@ bool do4_apply_output(void *context, uint8_t channel,
     }
 
     uint32_t duty =
-        ((1u << resolution) * config->duty_percent_x100 + 5000) / 10000;
+        ((1ULL << resolution) * config->duty_percent_x1000 + 50000) / 100000;
     /* LEDC reserves its maximum counter value. Keep non-endpoint values inside
      * it. */
     if (duty == 0) {
@@ -111,6 +114,7 @@ bool do4_apply_output(void *context, uint8_t channel,
     }
 
     pwm_attached[channel] = true;
+    pwm_gpio[channel] = (gpio_num_t)config->pin;
     gpio_configured[channel] = false;
     pwm_frequency[channel] = config->frequency_hz;
     pwm_polarity[channel] = config->active_low;
@@ -122,8 +126,8 @@ bool do4_apply_output(void *context, uint8_t channel,
     return false;
   }
 
-  const bool pin_active = enabled && (config->mode != MIO_OUTPUT_PWM ||
-                                      config->duty_percent_x100 != 0);
+  const bool pin_active = enabled && (config->mode != MECS_OUTPUT_PWM ||
+                                      config->duty_percent_x1000 != 0);
   if (gpio_set_level((gpio_num_t)config->pin,
                      pin_active != config->active_low) != ESP_OK) {
     return false;
@@ -139,9 +143,9 @@ bool do4_apply_output(void *context, uint8_t channel,
   return gpio_configured[channel];
 }
 
-uint8_t do4_read_pins(const mio_io_node_t *outputs) {
+uint8_t do4_read_pins(const mecs_io_node_t *outputs) {
   uint8_t levels = 0;
-  for (unsigned channel = 0; channel < MIO_CHANNELS; ++channel) {
+  for (unsigned channel = 0; channel < MECS_CHANNELS; ++channel) {
     if (gpio_get_level((gpio_num_t)outputs->config[channel].pin)) {
       levels |= (uint8_t)(1u << channel);
     }

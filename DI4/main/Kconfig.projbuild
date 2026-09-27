@@ -1,5 +1,5 @@
-menu "MIO DI4 input node"
-config MIO_NODE_ID
+menu "MECS DI4 input node"
+config MECS_NODE_ID
     int "Node address"
     range 1 127
     default 2

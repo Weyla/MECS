@@ -1,10 +1,10 @@
-# MIO wire protocol specification
+# MECS wire protocol specification
 
 | Document control | Value |
 |---|---|
-| Document ID | MIO-PROT-001 |
-| Revision / date | 3.0 / 2026-09-27 |
-| Software / wire | 0.3.0 / revision 3 |
+| Document ID | MECS-PROT-001 |
+| Revision / date | 3.1 / 2026-09-27 |
+| Firmware / wire | 0.3.1 / revision 3 |
 | Scope | Discovery, digital I/O, property transactions and liveness |
 
 ## 1. Bus profile
@@ -45,7 +45,7 @@ Responses have different CAN identifiers, allowing responders to arbitrate.
 |---:|---|
 | 0 | Wire revision 3 |
 | 1–2 | Board type: 1 = old discovery demo, 2 = DI4, 3 = DO4; 0 invalid |
-| 3–5 | Firmware major, minor, patch; current version 0.3.0 |
+| 3–5 | Firmware major, minor, patch; current node firmware is 0.3.1 |
 | 6 | Reason: 0 boot, 1 requested/periodic refresh, 2 CAN recovery |
 | 7 | Reserved, must be 0 |
 
@@ -218,3 +218,44 @@ Periodic + change enables both. Even change-only mode emits mandatory 500 ms
 status for liveness. Multiple changes between reports may collapse to the final
 state; the stream is not an edge-event recorder. Replies take priority over status.
 PWM generation is performed by LEDC and is independent of CAN update intervals.
+
+## Additive extensions in node firmware 0.3.1
+
+Revision-3 discovery, heartbeat, status and existing property layouts remain
+unchanged. Existing property 9 remains percent ×100 for compatible clients.
+
+| Property | Name | Value | Channel |
+|---|---|---|---|
+| 15 | `duty_precise` | 0–100000, percent ×1000 | 0–3 |
+| 16 | `report_min_ms` | 0–500 ms, minimum spacing for changed status | 255 |
+
+Property 15 is a single atomic duty assignment. Only for this property, command
+byte 1 stores channel in bits 0–1 and value bit 16 in bit 2; bits 3–7 must be zero.
+Bytes 6–7 still carry value bits 0–15. In its reply, byte 1 carries the existing
+error code in bits 0–6 and value bit 16 in bit 7. Session, transaction and read
+flag fields keep their existing positions. For example 100.000% encodes value
+100000 (`0x186A0`): value bytes `A0 86`, plus the extra value bit. A read request
+uses a zero value; its reply carries the full 17-bit value in the same layout.
+No second message or partially applied fractional write is involved.
+
+Old firmware rejects the unknown property; it cannot silently interpret it as
+an existing output operation. Firmware 0.3.1 stores duty in thousandths and
+converts legacy property-9 writes by multiplying by ten. Legacy reads round to
+the nearest hundredth. Output hardware receives the full requested value and
+rounds only when converting it to available timer ticks.
+
+Master clients send a fresh heartbeat when a new node is found, wait for live
+master status, and retry session/lease rejection before declaring the request
+failed. A node invalidates its cached successful reply when its lease stops
+outputs, so repeating an old enable transaction cannot falsely acknowledge an
+output that is now inactive. See [MECS API and recovery](MECS_API.md) for desired
+state reapplication and acceptance tests.
+
+The built-in Arduino and ESP-IDF transports use single-shot transmission and
+avoid an application-command backlog inside the controller. Protocol requests
+own the retry deadline; telemetry is refreshed on its next schedule. A lost
+arbitration can therefore defer a command until its application retry. This
+trades immediate controller retransmission for preventing indefinite delivery
+of expired commands after a disconnect. Bus-off recovery remains automatic.
+The flag semantics are defined in Espressif's
+[TWAI driver documentation](https://docs.espressif.com/projects/esp-idf/en/v5.5.5/esp32c3/api-reference/peripherals/twai.html).

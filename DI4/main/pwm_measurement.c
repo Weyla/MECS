@@ -11,10 +11,10 @@ void di4_pwm_edge(di4_pwm_capture_t *capture, bool pin_high, uint32_t now_us) {
       const uint32_t period = now_us - capture->rise_us;
       const uint32_t high_time = capture->fall_us - capture->rise_us;
       const bool period_ok =
-          period >= MIO_PWM_MIN_PERIOD_US && period <= MIO_PWM_MAX_PERIOD_US;
-      const bool pulse_widths_ok = high_time >= MIO_PWM_MIN_PULSE_US &&
+          period >= MECS_PWM_MIN_PERIOD_US && period <= MECS_PWM_MAX_PERIOD_US;
+      const bool pulse_widths_ok = high_time >= MECS_PWM_MIN_PULSE_US &&
                                    high_time < period &&
-                                   period - high_time >= MIO_PWM_MIN_PULSE_US;
+                                   period - high_time >= MECS_PWM_MIN_PULSE_US;
       if (period_ok && pulse_widths_ok) {
         capture->period_us = period;
         capture->high_us = high_time;
@@ -38,7 +38,7 @@ void di4_pwm_edge(di4_pwm_capture_t *capture, bool pin_high, uint32_t now_us) {
 }
 
 /* Return the latest complete measurement, or invalid after the signal stops. */
-mio_pwm_measurement_t di4_pwm_measure(di4_pwm_capture_t *capture,
+mecs_pwm_measurement_t di4_pwm_measure(di4_pwm_capture_t *capture,
                                       bool active_low, uint32_t now_us) {
   uint32_t timeout_us = capture->period_us * 3;
   if (timeout_us < 100000) {
@@ -49,7 +49,7 @@ mio_pwm_measurement_t di4_pwm_measure(di4_pwm_capture_t *capture,
     capture->valid = false;
   }
 
-  mio_pwm_measurement_t result = {0};
+  mecs_pwm_measurement_t result = {0};
   if (capture->valid) {
     const uint32_t active_time =
         active_low ? capture->period_us - capture->high_us : capture->high_us;

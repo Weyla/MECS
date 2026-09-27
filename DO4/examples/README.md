@@ -17,7 +17,7 @@ library and examples are hosted at [Weyla/MECS](https://github.com/Weyla/MECS).
 
 The CAN bus is configured for 500 kbit/s. Use a CAN transceiver, common ground,
 and end-of-line termination at both ends. `node: 1` is the example address;
-change it to match the node's `CONFIG_MIO_NODE_ID` if you reconfigure firmware.
+change it to match the node's `CONFIG_MECS_NODE_ID` if you reconfigure firmware.
 
 ## Output options
 
@@ -26,20 +26,22 @@ change it to match the node's `CONFIG_MIO_NODE_ID` if you reconfigure firmware.
 | Active level | High / Low | Low is available as a node build-time default; runtime polarity is per channel |
 | Mode | Digital / PWM / timed pulse / slow PWM | Modes are processed on the node |
 | PWM frequency | 10–10,000 Hz | Applies to frequency PWM mode |
-| PWM active duty | 0.00–100.00% | Percent supports two decimal places; can change while output is enabled |
+| PWM active duty | 0.000–100.000% | Managed API supports three decimal places; legacy duty supports two; can change while output is enabled |
 | Timed pulse | 10–60,000 ms | Start with the trigger property; node ends it locally |
 | Slow PWM period | 0.1–3,600.0 s | Encoded in tenths of a second; local generation, independent of CAN timing |
 | Output gate | Off / On | Each channel is controlled independently |
 
 All outputs start inactive. Master heartbeat loss or a new master session
 returns them inactive; they do not turn back on until explicitly enabled.
-The Arduino example reapplies mode settings after a node reboot but deliberately
-leaves output gates off until application logic explicitly enables a channel.
+The Arduino library reapplies requested configuration after a node reboot.
+This example explicitly enables channel 3 for the servo; channels 0–2 remain
+off. Use `turnOn()`/`turnOff()` for independent runtime control. The last
+requested enable state is restored after reconnect by the running master.
 
 ## Examples
 
 - [Arduino IDE](arduino/do4.ino)
-- [ESP-IDF](esp-idf/configure_do4.c)
+- [ESP-IDF helper](esp-idf/configure_do4.cpp)
 - [ESPHome](esphome/do4.yaml)
 
 For ESPHome, fetch the required C sources from GitHub into the same folder as
@@ -59,7 +61,50 @@ The ESPHome adapter currently exposes each output as an on/off switch. Its YAML
 does not yet expose runtime PWM, pulse, period, or polarity controls; those
 options are available through the portable client API in Arduino and ESP-IDF.
 
-The ESP-IDF file is a helper to add to a master application. Copy the Git
-dependency entries from [`esp-idf/idf_component.yml`](esp-idf/idf_component.yml)
-to that application's `main/idf_component.yml`, and call the helper after the
-node's boot identifier changes so its volatile settings are restored.
+The ESP-IDF files are helpers for a customer-written master application. Copy
+`configure_do4.cpp` and `configure_do4.h` into the application's `main`
+component, add the `.cpp` to that component's `SRCS`, and add
+`mecs_espidf_client` to its `REQUIRES`. Copy the component dependencies from
+[`esp-idf/idf_component.yml`](esp-idf/idf_component.yml) into the application
+manifest. After `can.begin(4, 5)`, create `auto outputs = can.node(1);` and call
+`configure_do4_outputs(outputs)` once. A `true` return means the settings were
+accepted by the local API; `can.loop()` sends them and processes acknowledgments.
+All outputs remain off until the application explicitly calls a channel's
+`turnOn()`. The managed client re-applies settings after a DO4 reset; no boot-ID
+handling is needed. Keep calling `can.loop()` from the owner task. For example:
+
+```cpp
+#include "MECSClient.h"
+#include "configure_do4.h"
+#include "esp_err.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+
+MECSClient can;
+MECSNode outputs = can.node(1);
+MECSPin servo = outputs.pin(3);
+
+extern "C" void app_main(void) {
+  ESP_ERROR_CHECK(can.begin(4, 5));
+  ESP_ERROR_CHECK(configure_do4_outputs(outputs) ? ESP_OK : ESP_FAIL);
+  servo.turnOn();
+  // Later, update live without turning the servo output off:
+  // servo.setDuty(12.500);
+  for (;;) {
+    can.loop();
+    vTaskDelay(pdMS_TO_TICKS(5));
+  }
+}
+```
+
+The application's `main/CMakeLists.txt` must compile the helper and link the
+client component, for example:
+
+```cmake
+idf_component_register(SRCS "main.cpp" "configure_do4.cpp"
+                       INCLUDE_DIRS "."
+                       REQUIRES mecs_espidf_client freertos)
+```
+
+See the [MECS API manual](../../SHARED/docs/MECS_API.md) for managed settings,
+confirmation, three-decimal duty and reset recovery.

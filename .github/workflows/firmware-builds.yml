@@ -1,0 +1,25 @@
+name: ESP-IDF firmware builds
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  firmware:
+    name: ${{ matrix.project }} (ESP-IDF 5.5)
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        project: [MASTER, DO4, DI4]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build firmware
+        run: |
+          docker run --rm \
+            -e HOME=/tmp \
+            -e IDF_GIT_SAFE_DIR=/project \
+            -v "$GITHUB_WORKSPACE:/project" \
+            -w /project \
+            espressif/idf:v5.5 \
+            idf.py -C "${{ matrix.project }}" build

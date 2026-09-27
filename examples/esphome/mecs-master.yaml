@@ -1,0 +1,53 @@
+esphome:
+  name: mecs-master
+  friendly_name: MECS Expansion Master
+  includes:
+    - mecs_components/mecs_sources/mecs_protocol.c
+    - mecs_components/mecs_sources/mecs_io.c
+    - mecs_components/mecs_sources/mecs_io_wire.c
+    - mecs_components/mecs_sources/mecs_client.c
+    - mecs_components/mecs_sources/mecs_protocol.h
+    - mecs_components/mecs_sources/mecs_io.h
+    - mecs_components/mecs_sources/mecs_client.h
+
+esp32:
+  board: esp32-c3-devkitm-1
+  framework:
+    type: esp-idf
+
+logger:
+
+api:
+
+ota:
+  - platform: esphome
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+
+external_components:
+  - source:
+      type: git
+      url: https://github.com/Weyla/MECS.git
+      ref: main
+      path: SHARED/adapters/esphome
+
+canbus:
+  - platform: esp32_can
+    id: mecs_can
+    can_id: 0
+    tx_pin: GPIO4
+    rx_pin: GPIO5
+    bit_rate: 500kbps
+
+mecs_expansion:
+  canbus_id: mecs_can
+  inputs:
+    - name: "DI4 input 1"
+      node: 2
+      channel: 0
+  outputs:
+    - name: "DO4 output 1"
+      node: 1
+      channel: 0

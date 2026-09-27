@@ -30,7 +30,7 @@ static esp_err_t state(httpd_req_t *req)
     }
     httpd_resp_set_type(req, "application/json");
     httpd_resp_set_hdr(req, "Cache-Control", "no-store");
-    httpd_resp_set_hdr(req, "X-MIO-Key", browser_key);
+    httpd_resp_set_hdr(req, "X-MECS-Key", browser_key);
     esp_err_t error = httpd_resp_send(req, json, HTTPD_RESP_USE_STRLEN);
     free(json);
     return error;
@@ -38,7 +38,7 @@ static esp_err_t state(httpd_req_t *req)
 static esp_err_t command(httpd_req_t *req)
 {
     char key[sizeof(browser_key)];
-    if (httpd_req_get_hdr_value_str(req, "X-MIO-Key", key, sizeof(key)) != ESP_OK ||
+    if (httpd_req_get_hdr_value_str(req, "X-MECS-Key", key, sizeof(key)) != ESP_OK ||
         strcmp(key, browser_key)) {
         return httpd_resp_send_err(req, HTTPD_403_FORBIDDEN,
                                    "Reload the dashboard before sending commands");

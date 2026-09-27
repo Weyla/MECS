@@ -1,14 +1,18 @@
 dependencies:
-  idf: ">=5.3"
-  mio_core:
+  idf: ">=5.5"
+  mecs_core:
     git: https://github.com/Weyla/MECS.git
-    path: SHARED/components/mio_core
+    path: SHARED/components/mecs_core
     version: main
-  mio_client:
+  mecs_client:
     git: https://github.com/Weyla/MECS.git
-    path: SHARED/components/mio_client
+    path: SHARED/components/mecs_client
     version: main
-  mio_espidf:
+  mecs_espidf:
     git: https://github.com/Weyla/MECS.git
-    path: SHARED/components/mio_espidf
+    path: SHARED/components/mecs_espidf
+    version: main
+  mecs_espidf_client:
+    git: https://github.com/Weyla/MECS.git
+    path: SHARED/components/mecs_espidf_client
     version: main

@@ -1,6 +1,5 @@
 /* Bounded JSON snapshot for the dashboard API. */
 #include "master_internal.h"
-#include "mio_command.h"
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -58,15 +57,16 @@ char *master_json(void) {
       (unsigned)uxQueueMessagesWaiting(commands));
   quoted(&j, ip);
   add(&j, ",\"schema\":[");
-  for (unsigned p = 1; p < MIO_PROP_COUNT; ++p) {
-    const mio_property_info_t *m = &mio_properties[p];
+  for (unsigned p = 1; p < MECS_PROP_COUNT; ++p) {
+    if (p == MECS_PROP_DUTY) continue; // Legacy two-decimal command remains on CAN.
+    const mecs_property_info_t *m = &mecs_properties[p];
     add(&j,
         "%s{\"id\":%u,\"name\":\"%s\",\"label\":\"%s\",\"unit\":\"%s\","
         "\"choices\":\"%s\","
         "\"min\":%u,\"max\":%u,\"roles\":%u,\"readonly\":%s,\"global\":%s,"
         "\"scale\":%u}",
         p == 1 ? "" : ",", p, m->name, m->label, m->unit, m->choices,
-        m->minimum, m->maximum, m->roles, m->readonly ? "true" : "false",
+        (unsigned)m->minimum, (unsigned)m->maximum, m->roles, m->readonly ? "true" : "false",
         master_global_property(p) ? "true" : "false", m->scale);
   }
   add(&j, "],\"nodes\":[");
@@ -90,25 +90,25 @@ char *master_json(void) {
         n->status.master_alive ? "true" : "false",
         n->status.fault ? "true" : "false", n->refreshing ? "true" : "false");
     first = false;
-    for (unsigned ch = 0; ch <= MIO_CHANNELS; ++ch) {
+    for (unsigned ch = 0; ch <= MECS_CHANNELS; ++ch) {
       add(&j, "%s{", ch ? "," : "");
       bool first_prop = true;
-      for (unsigned p = 1; p < MIO_PROP_COUNT; ++p) {
+      for (unsigned p = 1; p < MECS_PROP_COUNT; ++p) {
         if (n->valid[ch] & (1u << p)) {
-          add(&j, "%s\"%s\":%u", first_prop ? "" : ",", mio_properties[p].name,
-              n->values[ch][p]);
+          add(&j, "%s\"%s\":%u", first_prop ? "" : ",", mecs_properties[p].name,
+              (unsigned)n->values[ch][p]);
           first_prop = false;
         }
       }
       add(&j, "}");
     }
     add(&j, "],\"measurements\":[");
-    for (unsigned ch = 0; ch < MIO_CHANNELS; ++ch) {
-      const mio_pwm_measurement_t *m = &n->measurement[ch];
+    for (unsigned ch = 0; ch < MECS_CHANNELS; ++ch) {
+      const mecs_pwm_measurement_t *m = &n->measurement[ch];
       bool fresh = master_online(n, now) &&
                    (uint32_t)(now - n->measurement_ms[ch]) < 1500 &&
-                   (n->valid[ch] & (1u << MIO_PROP_FILTER)) &&
-                   n->values[ch][MIO_PROP_FILTER] == MIO_FILTER_PWM;
+                   (n->valid[ch] & (1u << MECS_PROP_FILTER)) &&
+                   n->values[ch][MECS_PROP_FILTER] == MECS_FILTER_PWM;
       add(&j, "%s{\"valid\":%s,\"period_us\":%lu,\"duty\":%u}", ch ? "," : "",
           fresh && m->valid ? "true" : "false", (unsigned long)m->period_us,
           m->duty_percent_x100);

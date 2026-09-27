@@ -2,9 +2,9 @@
 
 | Document control | Value |
 |---|---|
-| Document ID | MIO-INST-001 |
-| Revision / date | 3.0 / 2026-09-27 |
-| Software / wire | 0.3.0 / 3 |
+| Document ID | MECS-INST-001 |
+| Revision / date | 3.1 / 2026-09-27 |
+| Firmware / wire | 0.3.1 / 3 |
 | Hardware | ESP32-C3 SuperMini with SN65HVD230 transceivers |
 
 ## 1. Wiring and board roles
@@ -36,7 +36,8 @@ connected directly to an ESP32 GPIO.
 
 ## 2. Build and flash
 
-Use ESP-IDF 6.1 and target `esp32c3`. On this workstation:
+Use ESP-IDF 5.5 or newer and target `esp32c3`. The firmware CI builds with
+ESP-IDF 5.5. To activate a locally installed 6.1 toolchain on this workstation:
 
 ```sh
 source /home/renato/.espressif/tools/activate_idf_v6.1.sh
@@ -56,7 +57,7 @@ idf.py -C DI4 build
 Each board project has its own main.c, board pin assignments and sdkconfig, and calls shared libraries from SHARED. For a fresh project, `idf.py -C <project> set-target esp32c3` can
 initialize the target before building. Do not rerun `set-target` routinely: it
 regenerates configuration. Existing `sdkconfig` overrides initial defaults.
-Check `menuconfig → MIO DO4 output node` before repurposing an old build directory.
+Check `menuconfig → MECS DO4 output node` before repurposing an old build directory.
 
 | Project | Address | Profile and pins |
 |---|---:|---|
