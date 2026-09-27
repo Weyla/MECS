@@ -1,0 +1,309 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Modular IO · Workbench</title>
+<style>
+:root{color-scheme:light;--ink:#172c3a;--muted:#637785;--line:#d9e2e6;--green:#007b68;--paper:#fff;--bg:#f3f6f7;--red:#aa3340}*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 system-ui,sans-serif}header{background:#132e3c;color:white;padding:24px max(24px,calc((100vw - 1240px)/2));display:flex;align-items:center;justify-content:space-between;gap:20px}.brand{font-size:22px;font-weight:700;letter-spacing:-.5px}.brand small{display:block;font-size:12px;font-weight:400;letter-spacing:1.6px;color:#adcad5}main{max-width:1288px;margin:auto;padding:24px}.topline{display:flex;align-items:end;justify-content:space-between;gap:16px;margin:12px 0 24px}h1{font-size:30px;letter-spacing:-.8px;margin:0}h2{font-size:20px;margin:0}h3{font-size:16px;margin:0}p{margin:6px 0;color:var(--muted)}button,input,select{font:inherit}button{cursor:pointer;background:var(--green);color:white;border:1px solid transparent;border-radius:7px;padding:8px 14px;font-weight:600}button:hover{filter:brightness(.94)}button.secondary{background:white;color:var(--ink);border-color:var(--line)}button.danger{background:#fff0f1;color:var(--red);border-color:#edcdd1}button:disabled{cursor:not-allowed;opacity:.4}button:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid #58bcce;outline-offset:2px}.pill{font-size:12px;border-radius:20px;padding:4px 10px;background:#e4f4ee;color:#176c54;white-space:nowrap}.pill.off{background:#f8e9e9;color:#9d3341}.pill.wait{background:#f8edce;color:#806222}.summary{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:22px}.metric{background:white;border:1px solid var(--line);padding:16px 20px;border-radius:10px}.metric span{display:block;color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:1px}.metric strong{font-size:24px;font-weight:600}.node{background:white;border:1px solid var(--line);border-radius:12px;margin-bottom:24px;overflow:hidden}.nodehead{padding:20px;display:flex;justify-content:space-between;align-items:center;gap:12px;border-bottom:1px solid var(--line)}.nodehead small{color:var(--muted)}.actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.nodeinfo{padding:12px 20px;background:#f9fbfb;display:flex;gap:20px;flex-wrap:wrap;font-size:13px}.nodeinfo strong{font-weight:600}.channels{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:0}.channel{padding:18px;border-right:1px solid var(--line);min-width:0}.channel:last-child{border-right:0}.channelhead{display:flex;justify-content:space-between;align-items:center}.signal{display:flex;gap:8px;margin:16px 0}.signal span{flex:1;background:#f0f4f5;border-radius:7px;padding:9px;font-size:12px;color:var(--muted)}.signal b{display:block;color:var(--ink);font-size:18px}.signal .lit{background:#e2f4ec}.field{margin:12px 0}.field label{display:block;color:var(--muted);font-size:12px;margin-bottom:4px}.edit{display:flex;gap:5px}.edit input,.edit select{width:100%;min-width:0;padding:7px;border:1px solid #c5d2d8;border-radius:5px;background:white;color:var(--ink)}.edit button{font-size:12px;padding:6px 9px}.confirmed{font-size:11px;color:var(--muted);display:block;margin-top:3px;min-height:17px}.dirty .edit input,.dirty .edit select{border-color:#c29a3f;background:#fffcef}.channel .actions{margin-top:16px}.channel .actions button{flex:1;font-size:12px}.period{font-size:12px;min-height:36px;color:var(--muted)}details{border-top:1px solid var(--line);padding:14px 20px}summary{cursor:pointer;font-weight:600}.global{display:grid;grid-template-columns:repeat(2,minmax(0,320px));gap:20px}.notice{padding:10px 14px;border:1px solid #d5e2d9;border-radius:7px;background:#eff7f2;font-size:13px;color:#3d6350;margin-bottom:20px}.notice.error{background:#fff0f1;border-color:#edcdd1;color:var(--red)}.empty{padding:50px;text-align:center;background:white;border:1px dashed #b8cbd2;border-radius:12px;margin-bottom:24px}.bottom{display:grid;grid-template-columns:1fr 1fr;gap:20px}.panel{background:white;border:1px solid var(--line);border-radius:10px;padding:20px}.terminal{display:flex;gap:8px;margin:14px 0}.terminal input{flex:1;min-width:0;border:1px solid var(--line);border-radius:6px;padding:9px;font-family:monospace}pre{background:#132e3c;color:#c7e4df;border-radius:7px;padding:14px;font:12px/1.7 monospace;white-space:pre-wrap;overflow-wrap:anywhere;max-height:330px;overflow:auto;margin:14px 0 0}code{font:12px monospace;background:#edf3f4;padding:2px 5px;border-radius:4px}.help{font-size:13px;display:grid;gap:9px;margin-top:14px}.help span{color:var(--muted)}footer{margin:25px 0;color:var(--muted);font-size:12px}.offline .signal{opacity:.5}@media(max-width:1000px){.channels{grid-template-columns:repeat(2,1fr)}.channel:nth-child(2){border-right:0}.channel:nth-child(-n+2){border-bottom:1px solid var(--line)}}@media(max-width:620px){header{padding:16px}main{padding:16px}.summary{grid-template-columns:1fr 1fr}.channels,.bottom,.global{grid-template-columns:1fr}.channel{border-right:0;border-bottom:1px solid var(--line)}.nodehead,.topline{align-items:start;flex-direction:column}h1{font-size:26px}.metric{padding:12px}.metric strong{font-size:20px}}
+</style>
+</head>
+<body>
+<header><div class="brand">MODULAR IO<small>DEVICE WORKBENCH / 0.3</small></div><span id="connection" class="pill wait">Connecting to master…</span></header>
+<main>
+<div class="topline"><div><h1>Your expansion bus</h1><p>Configure local processing. Inspect confirmed states.</p></div><button id="discover" class="secondary">Discover nodes</button></div>
+<div class="summary"><div class="metric"><span>Online nodes</span><strong id="count">—</strong></div><div class="metric"><span>CAN bitrate</span><strong>500 <small>kbps</small></strong></div><div class="metric"><span>Master uptime</span><strong id="uptime">—</strong></div><div class="metric"><span>Commands in flight</span><strong id="queue">—</strong></div></div>
+<div id="message" class="notice" role="status" aria-live="polite">Each output is controlled individually. Duty, timing and mode can be adjusted while running.</div>
+<div id="empty" class="empty"><h2>Waiting for expansion nodes</h2><p>Power node 1 (outputs) and node 2 (inputs), then discover them.</p></div>
+<div id="nodes"></div>
+<div class="bottom"><section class="panel"><h2>Command console</h2><p>These commands also work in your USB serial monitor.</p><form id="console" class="terminal"><input id="command" aria-label="Serial command" placeholder="get 2 0 filter" autocomplete="off" maxlength="150"><button>Send</button></form><div class="help"><div><code>discover</code> <span>Find connected nodes</span></div><div><code>nodes</code> <span>Print current states to the event log</span></div><div><code>refresh 2</code> <span>Read all confirmed settings</span></div><div><code>set 2 0 filter 1</code> <span>Stable debounce on input channel 0</span></div><div><code>set 2 0 filter_ms 20</code> <span>20 ms debounce</span></div><div><code>on 1 0</code> <code>off 1 0</code></div><div><code>pulse 1 0</code> <span>Pulse mode required</span></div><div><code>set 1 0 duty 25.50</code> <span>Active duty in percent</span></div><div><code>set 1 0 period 60.5</code> <span>Slow PWM period in seconds</span></div><div><code>set 2 255 report_ms 100</code> <span>Node-wide property uses channel 255</span></div></div></section><section class="panel"><h2>Event log</h2><p>Node replies, command outcomes and connection events.</p><pre id="events" aria-label="Event log">Waiting for master…</pre></section></div>
+<footer>Channels 0–3 map to GPIO0–3. Input status separates electrical level from filtered activity. Output activity reports the commanded gate; it is not load feedback. PWM pin level is an instantaneous sample.</footer>
+</main>
+<script>
+
+'use strict';
+let state = null, key = '', connected = false, lastLog = -1;
+const views = new Map();
+const el = id => document.getElementById(id);
+function notice(text, error = false) {
+  el('message').textContent = text;
+  el('message').className = 'notice' + (error ? ' error' : '');
+}
+// HTTP acceptance means queued. Confirmed node values arrive later through
+// polling; never change a displayed confirmed value optimistically after POST.
+async function send(command) {
+  if (!connected) {
+    notice('Master connection unavailable. Reconnect before sending commands.', true);
+    return;
+  }
+  try {
+    const response = await fetch('/api/command', {
+      method : 'POST',
+      headers : {'Content-Type' : 'text/plain', 'X-MIO-Key' : key},
+      body : command,
+      signal : AbortSignal.timeout(4000)
+    });
+    const text = await response.text();
+    notice(command + ' · ' + text, !response.ok);
+  } catch (error) {
+    notice(
+        'Command outcome unknown: connection failed. Refresh settings before retrying an output action.',
+        true);
+  }
+}
+function make(tag, className, text) {
+  const node = document.createElement(tag);
+  if (className)
+    node.className = className;
+  if (text !== undefined)
+    node.textContent = text;
+  return node;
+}
+function button(label, command, style = 'secondary') {
+  const b = make('button', style, label);
+  b.onclick = () => send(command);
+  return b;
+}
+// Build controls from the same property schema the firmware validates. Keep
+// draft text separate from readback so polling cannot erase an unsent edit.
+function field(schema, nodeId, channel) {
+  const row = make('div', 'field'),
+        label = make('label', '', schema.label + (schema.unit ? ' (' + schema.unit + ')' : ''));
+  const editor = make('div', 'edit'),
+        input = document.createElement(schema.choices ? 'select' : 'input');
+  input.id = 'field-' + nodeId + '-' + channel + '-' + schema.name;
+  label.htmlFor = input.id;
+  if (schema.choices) {
+    schema.choices.split('|').forEach((name, i) => {
+      const option = make('option', '', name);
+      option.value = String(i);
+      input.append(option);
+    });
+  } else {
+    input.type = 'number';
+    input.min = String(schema.min / schema.scale);
+    input.max = String(schema.max / schema.scale);
+    input.step = String(1 / schema.scale);
+  }
+  const apply = make('button', '', 'Apply'),
+        confirmed = make('small', 'confirmed', 'Reading confirmed value…');
+  input.addEventListener('input', () => {
+    row.dataset.dirty = '1';
+    row.classList.add('dirty');
+  });
+  apply.onclick = () => {
+    const value = Number(input.value);
+    if (!input.value || !Number.isFinite(value) || !input.checkValidity() || value < schema.min/schema.scale || value > schema.max/schema.scale) {
+      notice('Enter a valid ' + schema.label.toLowerCase() + '.', true);
+      return;
+    }
+    send('set ' + nodeId + ' ' + channel + ' ' + schema.name + ' ' + input.value);
+  };
+  editor.append(input, apply);
+  row.append(label, editor, confirmed);
+  return {row, input, apply, confirmed, schema, channel};
+}
+function buildNode(node) {
+  const root = make('section', 'node'), head = make('div', 'nodehead'), title = make('div');
+  title.append(make('h2', '',
+                    'Node ' + node.id + ' · ' +
+                        (node.role === 1   ? '4 digital / PWM inputs'
+                         : node.role === 2 ? '4 digital / PWM outputs'
+                                           : 'Unknown board')));
+  title.append(make('small', '', 'Firmware ' + node.firmware + ' · board type ' + node.board));
+  const actions = make('div', 'actions'), badge = make('span', 'pill', 'Waiting');
+  actions.append(badge, button('Refresh settings', 'refresh ' + node.id));
+  head.append(title, actions);
+  root.append(head);
+  const info = make('div', 'nodeinfo');
+  root.append(info);
+  const grid = make('div', 'channels');
+  root.append(grid);
+  const fields = [], channels = [];
+  if (node.role)
+    for (let ch = 0; ch < 4; ch++) {
+      const card = make('div', 'channel'), heading = make('div', 'channelhead');
+      heading.append(make('h3', '', 'Channel ' + ch), make('span', 'pill', 'GPIO' + ch));
+      card.append(heading);
+      const signals = make('div', 'signal'), raw = make('span', '', 'Pin level'),
+            processed = make('span', '', node.role === 1 ? 'Filtered' : 'Output gate'),
+            rawValue = make('b', '', '—'), logicalValue = make('b', '', '—');
+      raw.append(rawValue);
+      processed.append(logicalValue);
+      signals.append(raw, processed);
+      card.append(signals);
+      const period = make('div', 'period');
+      card.append(period);
+      for (const schema of state.schema) {
+        if (schema.global || schema.readonly || schema.name === 'trigger' ||
+            schema.name === 'value' || !(schema.roles & node.role))
+          continue;
+        const f = field(schema, node.id, ch);
+        fields.push(f);
+        card.append(f.row);
+      }
+      let on = null, off = null, pulse = null;
+      if (node.role === 2) {
+        const controls = make('div', 'actions');
+        on = button('Enable', 'on ' + node.id, '');
+        off = button('Inactive', 'off ' + node.id);
+        pulse = button('Pulse', 'pulse ' + node.id, '');
+        on.onclick = () => send('on ' + node.id + ' ' + ch);
+        off.onclick = () => send('off ' + node.id + ' ' + ch);
+        pulse.onclick = () => send('pulse ' + node.id + ' ' + ch);
+        controls.append(on, off, pulse);
+        card.append(controls);
+      }
+      channels.push({raw, processed, rawValue, logicalValue, period, on, off, pulse});
+      grid.append(card);
+    }
+  const details = make('details'), summary = make('summary', '', 'Reporting settings'),
+        global = make('div', 'global');
+  details.append(summary, global);
+  if (node.role)
+    for (const schema of state.schema) {
+      if (!schema.global || !(schema.roles & node.role))
+        continue;
+      const f = field(schema, node.id, 255);
+      fields.push(f);
+      global.append(f.row);
+    }
+  details.append(make(
+      'p', '',
+      'Change reports are limited to one per 20 ms. A status heartbeat is always sent at least every 500 ms.'));
+  root.append(details);
+  el('nodes').append(root);
+  return {root, info, badge, fields, channels, board : node.board};
+}
+// Update existing cards instead of rebuilding forms on every poll. Liveness,
+// connection state and confirmed mode determine which controls may currently be used.
+function updateNode(node) {
+  let v = views.get(node.id);
+  if (v && v.board !== node.board) {
+    v.root.remove();
+    views.delete(node.id);
+    v = null;
+  }
+  if (!v) {
+    v = buildNode(node);
+    views.set(node.id, v);
+  }
+  const live = connected && node.online;
+  v.root.classList.toggle('offline', !live);
+  v.badge.textContent = !live ? 'Offline / stale' : node.fault ? 'Hardware fault' : 'Online';
+  v.badge.className = 'pill' + (!live || node.fault ? ' off' : '');
+  v.info.textContent =
+      'Last status ' + node.age_ms + ' ms ago · ' +
+      (node.master_alive ? 'Master heartbeat received' : 'Master heartbeat missing') +
+      (node.refreshing ? ' · Reading settings…' : '');
+  v.root.querySelectorAll('button').forEach(b => b.disabled = !live);
+  for (const f of v.fields) {
+    const value = node.values[f.channel === 255 ? 4 : f.channel][f.schema.name],
+          known = value !== undefined;
+    const configurationLocked = node.role === 2 && node.fault;
+    f.input.disabled = !live || !known || configurationLocked;
+    f.apply.disabled = f.input.disabled;
+    if (known) {
+      if (f.row.dataset.dirty === '1' && Number(f.input.value) === value/f.schema.scale) {
+        delete f.row.dataset.dirty;
+        f.row.classList.remove('dirty');
+      }
+      if (!f.row.dataset.dirty && document.activeElement !== f.input)
+        f.input.value = String(value/f.schema.scale);
+      const description = f.schema.choices
+                              ? f.schema.choices.split('|')[value]
+                              : String(value/f.schema.scale) + (f.schema.unit ? ' ' + f.schema.unit : '');
+      f.confirmed.textContent =
+          'Confirmed: ' + description + (configurationLocked ? ' · hardware fault' : '');
+    } else
+      f.confirmed.textContent = 'Waiting for readback…';
+    const settings = node.values[f.channel] || {};
+    f.row.hidden =
+        (f.schema.name === 'filter_ms' && settings.filter !== 1) ||
+        (f.schema.name === 'frequency' && settings.mode !== 1) ||
+        (f.schema.name === 'duty' && settings.mode !== 1 && settings.mode !== 3) ||
+        (f.schema.name === 'period' && settings.mode !== 3) ||
+        (f.schema.name === 'pulse_ms' && settings.mode !== 2);
+  }
+  v.channels.forEach((c, ch) => {
+    const high = (node.raw >> ch) & 1, active = (node.logical >> ch) & 1,
+          settings = node.values[ch];
+    c.rawValue.textContent = live ? (high ? 'HIGH' : 'LOW') : '—';
+    c.logicalValue.textContent = live ? (active ? 'ACTIVE' : 'INACTIVE') : '—';
+    c.processed.classList.toggle('lit', live && !!active);
+    if (node.role === 2) {
+      c.on.disabled = !live || !node.master_alive || node.fault || settings.mode === 2;
+      c.off.disabled = !live;
+      c.pulse.disabled = !live || !node.master_alive || node.fault || settings.mode !== 2;
+      c.period.textContent =
+          settings.mode === 1 && settings.frequency
+              ? 'Configured PWM: ' + (1000000 / settings.frequency).toFixed(1) + ' µs period · ' +
+                    ((settings.duty || 0) / 100).toFixed(2) + '% active duty'
+          : settings.mode === 3
+              ? 'Slow PWM: ' + ((settings.period || 0)/10).toFixed(1) + ' s period · ' + ((settings.duty || 0)/100).toFixed(2) + '% active duty'
+          : settings.mode === 2
+              ? 'Local timed pulse · ' + (settings.pulse_ms ?? '—') + ' ms'
+              : 'Digital output · active level ' + (settings.polarity ? 'LOW' : 'HIGH');
+    } else if(settings.filter === 2) {
+      const m=node.measurements?.[ch];
+      c.period.textContent=live&&m?.valid ?
+          (1000000/m.period_us).toFixed(2)+' Hz · '+(m.period_us/1000).toFixed(3)+' ms period · '+(m.duty/100).toFixed(2)+'% active duty' :
+          'PWM measurement: no valid signal / stale';
+    } else { c.period.textContent=''; }
+  });
+}
+function render() {
+  el('connection').textContent =
+      connected ? 'Master connected · ' + state.ip : 'Master connection lost';
+  el('connection').className = 'pill' + (connected ? '' : ' off');
+  el('count').textContent =
+      (connected ? state.nodes.filter(n => n.online).length : 0) + ' / ' + state.nodes.length;
+  el('uptime').textContent = Math.floor(state.uptime_ms / 1000) + ' s';
+  el('queue').textContent = state.queued + (state.pending ? 1 : 0);
+  el('empty').hidden = state.nodes.length > 0;
+  state.nodes.forEach(updateNode);
+  if (state.log_sequence !== lastLog) {
+    el('events').textContent = state.logs.join('\n');
+    el('events').scrollTop = el('events').scrollHeight;
+    lastLog = state.log_sequence;
+  }
+  el('discover').disabled = !connected;
+  el('console').querySelector('button').disabled = !connected;
+}
+// One request at a time, with a timeout. A failed connection marks every
+// displayed signal stale and disables controls; it does not command outputs.
+async function poll() {
+  try {
+    const response =
+        await fetch('/api/state', {cache : 'no-store', signal : AbortSignal.timeout(2500)});
+    if (!response.ok)
+      throw Error('HTTP ' + response.status);
+    const recovered = !connected && state !== null;
+    state = await response.json();
+    key = response.headers.get('X-MIO-Key') || '';
+    connected = true;
+    if (recovered)
+      notice('Connection restored. Inspect confirmed settings before continuing.');
+    render();
+  } catch (error) {
+    connected = false;
+    if (state)
+      render();
+    else {
+      el('connection').textContent = 'Cannot reach master';
+      el('connection').className = 'pill off';
+    }
+    notice('Connection lost. Displayed states are stale; controls are disabled.', true);
+  }
+  setTimeout(poll, 750);
+}
+el('discover').onclick = () => send('discover');
+el('console').onsubmit = event => {
+  event.preventDefault();
+  const command = el('command').value.trim();
+  if (command)
+    send(command);
+};
+poll();
+</script>
+</body>
+</html>

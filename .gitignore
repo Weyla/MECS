@@ -1,0 +1,22 @@
+# ESP-IDF generated output and per-developer configuration
+**/build/
+**/sdkconfig
+**/sdkconfig.old
+**/dependencies.lock
+**/managed_components/
+
+# Host test output
+/SHARED/tests/build/
+/build-host/
+
+# Generated ESPHome package (recreate with the documented packager)
+/examples/esphome/mio_components/
+
+# Editor and operating-system metadata
+.DS_Store
+.vscode/
+__pycache__/
+.pytest_cache/
+.esphome/
+*.swp
+*.swo

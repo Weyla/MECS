@@ -1,0 +1,6 @@
+menu "MIO DI4 input node"
+config MIO_NODE_ID
+    int "Node address"
+    range 1 127
+    default 2
+endmenu

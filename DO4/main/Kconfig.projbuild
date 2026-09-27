@@ -1,0 +1,11 @@
+menu "MIO DO4 output node"
+config MIO_NODE_ID
+    int "Node address"
+    range 1 127
+    default 1
+config MIO_OUTPUT_ACTIVE_LOW
+    bool "Output drivers are active-low at boot"
+    default n
+    help
+        Select this to match the external output driver. Runtime polarity is volatile.
+endmenu
