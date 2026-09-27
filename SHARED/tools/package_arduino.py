@@ -78,6 +78,7 @@ def main() -> int:
         "sentence=Framework-friendly client for modular CAN I/O nodes.\n"
         "paragraph=Discover modules and use remote I/O without building CAN frames.\n"
         "category=Communication\n"
+        "url=https://github.com/Weyla/MECS\n"
         "architectures=esp32\n"
         "includes=MIOClient.h\n",
         encoding="utf-8",
