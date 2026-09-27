@@ -4,10 +4,14 @@
 ESP-IDF. It uses the ESP32's on-chip TWAI controller and needs the external CAN
 transceiver. The initial adapter supports 250, 500 and 1000 kbit/s.
 
-Build an installable Arduino library folder from the canonical shared source:
+The sources and examples are hosted at
+[Weyla/MECS](https://github.com/Weyla/MECS). Download the package script and
+assemble a library from the GitHub `main` branch:
 
 ```sh
-python3 SHARED/tools/package_arduino.py /tmp
+curl -fsSL https://raw.githubusercontent.com/Weyla/MECS/main/SHARED/tools/package_arduino.py \
+  -o /tmp/package_arduino.py
+python3 /tmp/package_arduino.py --github-ref main /tmp
 ```
 
 The script creates `/tmp/MIOClient`; zip that folder or copy it to the Arduino
@@ -42,6 +46,8 @@ when its transaction counter is exhausted. The event callback has the
 confirmed event. `setPwmDuty()` accepts percent with decimals, such as `12.5f`.
 Keep the callback short; it runs inside `io.loop()`.
 
+The customer sketch is available at
+[`examples/arduino/BasicMaster/BasicMaster.ino`](https://github.com/Weyla/MECS/blob/main/examples/arduino/BasicMaster/BasicMaster.ino).
 This adapter targets ESP32 Arduino cores exposing Espressif's `driver/twai.h`
 legacy driver API. Compile it against the Arduino-ESP32 version selected for
 the product before claiming support for additional core releases.

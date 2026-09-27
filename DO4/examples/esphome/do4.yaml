@@ -1,6 +1,15 @@
+# Example master using the GitHub-hosted ESPHome MIO component.
+# DO4 remote channels map to GPIO0..3; CAN on the master uses GPIO4/5.
+# Settings supported by the node: active-high/low; digital/PWM/timed-pulse/
+# slow-PWM modes; frequency 10..10000 Hz; duty 0..100% at 0.01% resolution;
+# pulse 10..60000 ms; slow period 0.1..3600.0 seconds; individual on/off gate.
+# All outputs start inactive and return inactive when the heartbeat expires.
+# The current ESPHome adapter exposes switch entities only; advanced runtime
+# settings are not exposed by this adapter yet.
+
 esphome:
-  name: mio-master
-  friendly_name: MIO Expansion Master
+  name: mio-do4-master
+  friendly_name: MIO DO4 Output Example
   includes:
     - mio_components/mio_sources/mio.c
     - mio_components/mio_sources/mio_io.c
@@ -45,11 +54,16 @@ canbus:
 
 mio_expansion:
   canbus_id: mio_can
-  inputs:
-    - name: "DI4 input 1"
-      node: 2
-      channel: 0
   outputs:
-    - name: "DO4 output 1"
+    - name: "DO4 output 0 / GPIO0"
       node: 1
       channel: 0
+    - name: "DO4 output 1 / GPIO1"
+      node: 1
+      channel: 1
+    - name: "DO4 output 2 / GPIO2"
+      node: 1
+      channel: 2
+    - name: "DO4 output 3 / GPIO3"
+      node: 1
+      channel: 3

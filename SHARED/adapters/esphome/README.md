@@ -4,14 +4,19 @@ The ESPHome adapter binds the portable MIO client to ESPHome's configured
 `canbus` component. It exposes mapped DI4 inputs as binary sensors and DO4
 outputs as switches. No user automation needs CAN identifiers or payloads.
 
-Prepare a local external-component directory with the canonical protocol and
-client C sources:
+The ESPHome adapter is fetched from
+[Weyla/MECS](https://github.com/Weyla/MECS) by the example YAML. Download the
+portable C sources needed by ESPHome's build from the GitHub `main` branch:
 
 ```sh
-python3 SHARED/tools/package_esphome.py /tmp/mio-esphome
+curl -fsSL https://raw.githubusercontent.com/Weyla/MECS/main/SHARED/tools/package_esphome.py \
+  -o /tmp/package_esphome.py
+python3 /tmp/package_esphome.py --github-ref main .
 ```
 
-Add the generated folder next to the ESPHome YAML file and configure:
+Keep the generated sources beside the YAML file. A complete master
+configuration is maintained at
+[`examples/esphome/mio-master.yaml`](https://github.com/Weyla/MECS/blob/main/examples/esphome/mio-master.yaml).
 
 ```yaml
 esphome:
@@ -30,8 +35,10 @@ esphome:
 
 external_components:
   - source:
-      type: local
-      path: mio_components
+      type: git
+      url: https://github.com/Weyla/MECS.git
+      ref: main
+      path: SHARED/adapters/esphome
 
 canbus:
   - platform: esp32_can

@@ -1,6 +1,16 @@
+# Example master using the GitHub-hosted ESPHome MIO component.
+# DI4 remote channels map to GPIO0..3; CAN on the master uses GPIO4/5.
+# The DI4 firmware defaults to active-low, pull-up, stable debounce (20 ms),
+# and reports both periodically and on change (100 ms).
+# Supported DI4 settings: polarity high/low; filter none/stable/PWM;
+# debounce 1..1000 ms; pull floating/up/down; reporting periodic/change/both;
+# report interval 20..500 ms. PWM capture is local to the DI4 node.
+# The current ESPHome adapter maps input states only; per-channel filter and
+# polarity controls are not yet exposed as ESPHome entities/actions.
+
 esphome:
-  name: mio-master
-  friendly_name: MIO Expansion Master
+  name: mio-di4-master
+  friendly_name: MIO DI4 Input Example
   includes:
     - mio_components/mio_sources/mio.c
     - mio_components/mio_sources/mio_io.c
@@ -46,10 +56,15 @@ canbus:
 mio_expansion:
   canbus_id: mio_can
   inputs:
-    - name: "DI4 input 1"
+    - name: "DI4 input 0 / GPIO0"
       node: 2
       channel: 0
-  outputs:
-    - name: "DO4 output 1"
-      node: 1
-      channel: 0
+    - name: "DI4 input 1 / GPIO1"
+      node: 2
+      channel: 1
+    - name: "DI4 input 2 / GPIO2"
+      node: 2
+      channel: 2
+    - name: "DI4 input 3 / GPIO3"
+      node: 2
+      channel: 3
