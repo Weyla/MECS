@@ -22,14 +22,8 @@ bool MECSExpansion::send_frame(void *context, const mecs_frame_t *frame) {
                                   data) == canbus::ERROR_OK;
 }
 
-void MECSExpansion::setup() {
-  if (canbus_ == nullptr) {
-    ESP_LOGE(TAG, "A CAN bus is required");
-    mark_failed();
-    return;
-  }
-  /* Persist a new session on each boot so a rebooted master cannot accidentally
-   * continue an output-enable lease from an earlier run. */
+bool MECSExpansion::save_next_session() {
+  /* A session is usable only after the preference reaches persistent storage. */
   auto preference = global_preferences->make_preference<uint16_t>(
       SESSION_PREFERENCE_KEY, true);
   uint16_t previous_session = 0;
@@ -38,14 +32,25 @@ void MECSExpansion::setup() {
         PREVIOUS_SESSION_PREFERENCE_KEY, true);
     (void)previous_preference.load(&previous_session);
   }
-  session_ = previous_session == 0xFFFFu ? 1u : previous_session + 1u;
-  if (session_ == 0) session_ = 1;
-  if (!preference.save(&session_)) {
+  const uint16_t next = previous_session == UINT16_MAX ? 1u : previous_session + 1u;
+  if (!preference.save(&next) || !global_preferences->sync()) {
     ESP_LOGE(TAG, "Could not save master session");
+    return false;
+  }
+  session_ = next;
+  return true;
+}
+
+void MECSExpansion::setup() {
+  if (canbus_ == nullptr) {
+    ESP_LOGE(TAG, "A CAN bus is required");
     mark_failed();
     return;
   }
-  global_preferences->sync();
+  if (!save_next_session()) {
+    mark_failed();
+    return;
+  }
   const mecs_client_config_t config = {send_frame, this, session_};
   if (!mecs_client_begin(&client_, &config, on_event, this)) {
     ESP_LOGE(TAG, "MECS client initialization failed");
@@ -62,6 +67,15 @@ void MECSExpansion::setup() {
 void MECSExpansion::loop() {
   if (is_failed()) return;
   const uint32_t now_ms = millis();
+  if (mecs_client_needs_new_session(&client_) &&
+      (!session_retry_pending_ || (uint32_t)(now_ms - session_retry_ms_) >= 1000)) {
+    session_retry_pending_ = true;
+    session_retry_ms_ = now_ms;
+    if (save_next_session() && mecs_client_set_session(&client_, session_)) {
+      session_retry_pending_ = false;
+      ESP_LOGI(TAG, "Master session renewed: %u; outputs require explicit enabling", session_);
+    }
+  }
   mecs_client_loop(&client_, now_ms);
   refresh_entity_states(now_ms);
 }

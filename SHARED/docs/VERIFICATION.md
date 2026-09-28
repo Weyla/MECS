@@ -3,7 +3,7 @@
 | Document control | Value |
 |---|---|
 | Document ID | MECS-TEST-001 |
-| Revision / date | 3.2 / 2026-09-27 |
+| Revision / date | 3.3 / 2026-09-28 |
 | Firmware / wire | 0.3.1 / 3 |
 | Hardware roles | Master; node 1 DO4; node 2 DI4 |
 
@@ -21,8 +21,8 @@ its first hosted run is still pending.
 
 | Project | Current evidence | Result |
 |---|---|---|
-| Portable client tests | Local CMake/CTest run on 2026-09-27; see section 2 | Pass |
-| MASTER, DO4, DI4 | Local build in the Espressif ESP-IDF 5.5 container on 2026-09-27 | Pass |
+| Portable client tests | Local CMake/CTest run on 2026-09-28; see section 2 | Pass |
+| MASTER, DO4, DI4 | Local build in the Espressif ESP-IDF 5.5 container on 2026-09-28 | Pass |
 | `examples/esp-idf/mecs_master` | Uses GitHub Component Manager dependencies; not built in this workspace | Pending |
 | ESPHome example | No ESPHome compiler is installed in this workspace | Pending |
 
@@ -33,7 +33,7 @@ available in this workspace.
 
 ## 2. Portable software checks
 
-The portable library was built with warnings treated as errors, then both CTest
+The portable library was built with warnings treated as errors, then all three CTest
 targets passed:
 
 ```sh
@@ -44,11 +44,12 @@ ctest --test-dir /tmp/mecs-build --output-on-failure
 
 | Test | Coverage | Result |
 |---|---|---|
-| `client` | Frame validation, discovery and client behavior | Pass |
+| `client` | Discovery, client behavior, expired replies and clock wrap | Pass |
 | `recovery` | Reboots, missing/duplicate frames, transport recovery, hardware faults, precise PWM, and retained setting errors | Pass |
+| `can` | Production adapter with mock RTOS/driver: buffer ownership, overflow, stale/FD RX, fault log limits, recovery and failed restart | Pass |
 
-These are deterministic host simulations of the portable client and node
-model. They do not execute FreeRTOS scheduling, the ESP-IDF TWAI driver, GPIO,
+These are deterministic host simulations of the portable client, node
+model and transport API boundary. They do not execute FreeRTOS scheduling, the ESP-IDF TWAI driver, GPIO,
 LEDC or the ESPHome runtime.
 
 ## 3. Hardware acceptance
@@ -91,3 +92,12 @@ dependencies, and validate/compile the ESPHome YAML with the product's selected
 ESPHome release. Record the tool versions, source revision, board wiring and
 observed results before changing a pending hardware or framework result to
 Pass.
+
+## 5. Review evidence — 2026-09-28
+
+See [the code review](CODE_REVIEW_2026-09-28.md) for findings and remaining bench
+work. MASTER/DO4/DI4 passed ESP-IDF 5.5 builds with only their declared component
+dependencies. A freshly packaged Arduino ServoRecovery example compiled with
+the installed ESP32 3.3.11 core. Both package scripts completed and the dashboard
+JavaScript passed `node --check`. ESPHome runtime compilation, physical CAN
+fault injection and live dashboard rendering remain pending.

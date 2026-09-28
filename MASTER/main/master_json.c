@@ -56,6 +56,16 @@ char *master_json(void) {
       (unsigned long)now, session, pending.active ? "true" : "false",
       (unsigned)uxQueueMessagesWaiting(commands));
   quoted(&j, ip);
+  add(&j, ",\"can\":{\"state\":%lu,\"rx\":%lu,\"rx_dropped\":%lu,"
+          "\"rx_stale\":%lu,\"rx_rejected\":%lu,\"tx\":%lu,\"tx_failed\":%lu,"
+          "\"tx_rejected\":%lu,\"bus_errors\":%lu,\"recoveries\":%lu,"
+          "\"tec\":%lu,\"rec\":%lu}",
+      (unsigned long)can_stats.state, (unsigned long)can_stats.rx_received,
+      (unsigned long)can_stats.rx_dropped, (unsigned long)can_stats.rx_stale,
+      (unsigned long)can_stats.rx_rejected, (unsigned long)can_stats.tx_completed,
+      (unsigned long)can_stats.tx_failed, (unsigned long)can_stats.tx_rejected,
+      (unsigned long)can_stats.bus_errors, (unsigned long)can_stats.recoveries,
+      (unsigned long)can_stats.tx_error_count, (unsigned long)can_stats.rx_error_count);
   add(&j, ",\"schema\":[");
   for (unsigned p = 1; p < MECS_PROP_COUNT; ++p) {
     if (p == MECS_PROP_DUTY) continue; // Legacy two-decimal command remains on CAN.

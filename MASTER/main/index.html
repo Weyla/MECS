@@ -15,6 +15,7 @@
 <div id="message" class="notice" role="status" aria-live="polite">Each output is controlled individually. Duty, timing and mode can be adjusted while running.</div>
 <div id="empty" class="empty"><h2>Waiting for expansion nodes</h2><p>Power node 1 (outputs) and node 2 (inputs), then discover them.</p></div>
 <div id="nodes"></div>
+<section class="panel"><h2>CAN diagnostics</h2><p id="can-diagnostics">Waiting for transport counters…</p></section>
 <div class="bottom"><section class="panel"><h2>Command console</h2><p>These commands also work in your USB serial monitor.</p><form id="console" class="terminal"><input id="command" aria-label="Serial command" placeholder="get 2 0 filter" autocomplete="off" maxlength="150"><button>Send</button></form><div class="help"><div><code>discover</code> <span>Find connected nodes</span></div><div><code>nodes</code> <span>Print current states to the event log</span></div><div><code>refresh 2</code> <span>Read all confirmed settings</span></div><div><code>set 2 0 filter 1</code> <span>Stable debounce on input channel 0</span></div><div><code>set 2 0 filter_ms 20</code> <span>20 ms debounce</span></div><div><code>on 1 0</code> <code>off 1 0</code></div><div><code>pulse 1 0</code> <span>Pulse mode required</span></div><div><code>set 1 0 duty_precise 25.501</code> <span>Active duty in percent</span></div><div><code>set 1 0 period 60.5</code> <span>Slow PWM period in seconds</span></div><div><code>set 2 255 report_ms 100</code> <span>Node-wide property uses channel 255</span></div></div></section><section class="panel"><h2>Event log</h2><p>Node replies, command outcomes and connection events.</p><pre id="events" aria-label="Event log">Waiting for master…</pre></section></div>
 <footer>Channels 0–3 map to GPIO0–3. Input status separates electrical level from filtered activity. Output activity reports the commanded gate; it is not load feedback. PWM pin level is an instantaneous sample.</footer>
 </main>
@@ -259,6 +260,15 @@ function render() {
       (connected ? state.nodes.filter(n => n.online).length : 0) + ' / ' + state.nodes.length;
   el('uptime').textContent = Math.floor(state.uptime_ms / 1000) + ' s';
   el('queue').textContent = state.queued + (state.pending ? 1 : 0);
+  const can = state.can;
+  el('can-diagnostics').textContent = can ?
+      (connected ? '' : 'Stale snapshot · ') +
+      (['Active', 'Warning', 'Error passive', 'Bus off'][can.state] || 'Unknown') +
+      ` · RX ${can.rx} · TX acknowledged ${can.tx} · TX failed ${can.tx_failed}` +
+      ` · TX rejected ${can.tx_rejected} · RX dropped ${can.rx_dropped}` +
+      ` · RX stale ${can.rx_stale} · RX invalid ${can.rx_rejected}` +
+      ` · Bus events ${can.bus_errors} · Recoveries ${can.recoveries}` +
+      ` · TEC ${can.tec} / REC ${can.rec}` : 'Transport counters unavailable';
   el('empty').hidden = state.nodes.length > 0;
   state.nodes.forEach(updateNode);
   if (state.log_sequence !== lastLog) {

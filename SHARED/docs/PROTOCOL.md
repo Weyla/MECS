@@ -259,3 +259,13 @@ trades immediate controller retransmission for preventing indefinite delivery
 of expired commands after a disconnect. Bus-off recovery remains automatic.
 The flag semantics are defined in Espressif's
 [TWAI driver documentation](https://docs.espressif.com/projects/esp-idf/en/v5.5.5/esp32c3/api-reference/peripherals/twai.html).
+
+### Local transport freshness and deadline enforcement
+
+The ESP-IDF adapter discards RX frames held in its software queue for 100 ms
+or longer and clears the queue after bus recovery. This bounds stale traffic
+inside the firmware; no timestamp is added to the wire. Both the portable client
+and development master enforce request expiry before accepting a reply as well
+as before retransmitting. A reply at the deadline is late and cannot establish
+a confirmation. Each node preserves its one pending reply and leaves additional
+commands for the master's existing retry mechanism.

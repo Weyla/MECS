@@ -200,3 +200,72 @@ explicit OFF during a disconnection overrides a previously requested ON.
 
 The three-decimal duty extension and the minimum report interval are specified
 in `PROTOCOL.md`; customer semantics and commissioning steps are in `MECS_API.md`.
+
+## CAN diagnostics and recovery
+
+`mecs_can.c` separates ISR frame capture/completion, controller lifecycle,
+nonblocking send/receive, diagnostic formatting, and recovery. Call its public
+functions from one owner task. Interrupt callbacks only copy frames, update
+counters under a short critical section, and release the TX token; they do not
+format logs or allocate memory.
+
+The RX queue holds 32 timestamped frames. Frames queued for 100 ms or longer
+are discarded so an owner-task stall cannot renew a lease from a long backlog
+of old heartbeats. This is a local transport freshness bound, not a new wire
+field. Keep servicing the owner task frequently: timestamps cannot compensate
+for a task that is not running its output safety checks. Extended, RTR and FD
+frames are discarded before entering the Classic CAN protocol queue.
+
+During bus recovery, receive delivery and new transmissions are suspended.
+After the controller reaches error-active state, the adapter disables and
+deletes it, clears queued RX, and creates a new controller before returning
+ownership of the persistent TX buffer. This also handles an aborted transmission
+that never produced a completion callback. Failed controller creation is retried
+once per second. The queues stay allocated during this process. ESP-IDF 5.5
+has no public TX idle/cancel call, so do not replace this sequence with an
+unconditional semaphore release on a state change.
+
+The test master cancels old commands and invalidates readback after transport
+recovery, node recovery announcements, reboot, expired status, or a reported
+master-lease loss. Nodes retain one unsent reply; subsequent commands are left
+for the master's transaction retry rather than overwriting that reply. Boot and
+recovery announcements retain their reason when a discovery request arrives.
+
+### Reading diagnostics
+
+At the default INFO level, serial logs include startup pins/bitrate, controller
+state transitions and error counters, recovery, master sessions, node lease
+loss, latched hardware faults, and rate-limited command rejection details.
+Transport fault totals and error categories are printed at most once per second;
+normal TX slot contention is counted without producing a warning per send.
+Error-category flags report whether an ACK, bit, form, stuff or arbitration event
+occurred during the interval. Arbitration alone is normal bus contention and
+does not produce an error-category warning.
+
+`mecs_can_get_stats()` gives an owner-task snapshot of cumulative RX/TX,
+overflow, invalid/stale RX, busy/rejected/failed TX, bus events and recoveries.
+Counters wrap at `UINT32_MAX`. RX totals include frames dropped because the
+queue was full. Bus events include arbitration losses. TX submission, successful
+link-level ACK, and a confirmed application command are different events.
+The MASTER owner copies this snapshot under its existing mutex; `/api/state`
+returns it under `can`, and the dashboard shows it in **CAN diagnostics**.
+HTTP handlers never call the transport.
+
+For temporary frame and transaction tracing, select DEBUG as the maximum log
+level in `idf.py -C <board> menuconfig`, then enable the desired tags after
+startup:
+
+```c
+esp_log_level_set("mecs_can", ESP_LOG_DEBUG); /* CAN IDs and DLCs */
+esp_log_level_set("DO4", ESP_LOG_DEBUG);      /* Requests and result codes */
+esp_log_level_set("DI4", ESP_LOG_DEBUG);
+esp_log_level_set("master", ESP_LOG_DEBUG);   /* Session/transaction/attempt */
+```
+
+Detailed tracing can disturb timing on a busy bus; the default uses bounded
+summaries. Physical unplug/reconnect, missing ACK, overload and master-loss
+behavior still need bench verification with the deployed transceivers and loads.
+
+The fixed firmware CMake files select `COMPONENTS main`, so ESP-IDF builds only
+the declared dependency graph. DI4/DO4 do not compile Wi-Fi, the dashboard,
+command parser, or the master client.

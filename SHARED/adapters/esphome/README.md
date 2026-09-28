@@ -73,3 +73,10 @@ compile/configuration check against the ESPHome release selected for the
 product. The C files are listed under `esphome.includes` because ESPHome copies
 and compiles explicitly listed `.c` files into its generated project. See the
 root `README.md` for portable-core tests.
+
+A saved master session must also pass the preference `sync()` step before it
+is used. When transactions exhaust the current session, the adapter persists a
+new session and calls the shared client's session transition. Failed persistence
+is retried at most once per second. Session rotation stops outputs and requires
+explicit enabling again. This integration still requires compilation and bench
+validation against the selected ESPHome release.

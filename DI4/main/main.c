@@ -42,20 +42,42 @@ static void handle_frame(const mecs_frame_t *frame, uint32_t now,
                          mecs_announce_reason_t *announce_reason,
                          bool *reply_pending, mecs_frame_t *reply_frame) {
   if (mecs_is_discovery_request(frame)) {
+    if (!*announce_pending) *announce_reason = MECS_ANNOUNCE_REQUEST;
     *announce_pending = true;
-    *announce_reason = MECS_ANNOUNCE_REQUEST;
     return;
   }
 
   uint16_t session;
   if (mecs_io_decode_heartbeat(frame, &session)) {
+    if (!inputs.master_alive || session != inputs.session) {
+      ESP_LOGI(TAG, "Master heartbeat: session %u -> %u", inputs.session, session);
+    }
     mecs_io_node_heartbeat(&inputs, session, now);
     return;
   }
 
   mecs_io_request_t request;
   if (mecs_io_decode_request(NODE_ADDRESS, frame, &request)) {
+    /* Continue draining broadcasts while TX is busy. A command whose reply
+     * cannot be retained is left for the master's bounded retry. */
+    if (*reply_pending) {
+      ESP_LOGD(TAG, "Command deferred: reply slot busy, transaction=%u", request.transaction);
+      return;
+    }
     mecs_io_reply_t reply = mecs_io_node_request(&inputs, &request, now);
+    static bool rejection_logged;
+    static uint32_t last_rejection_ms;
+    if (reply.error != MECS_OK &&
+        (!rejection_logged || (uint32_t)(now - last_rejection_ms) >= 1000)) {
+      ESP_LOGW(TAG, "Rejected session=%u transaction=%u channel=%u property=0x%02x: %s",
+               request.session, request.transaction, request.channel,
+               request.property, mecs_error_name(reply.error));
+      rejection_logged = true;
+      last_rejection_ms = now;
+    }
+    ESP_LOGD(TAG, "Request session=%u transaction=%u channel=%u property=0x%02x value=%lu: %s",
+             request.session, request.transaction, request.channel, request.property,
+             (unsigned long)request.value, mecs_error_name(reply.error));
     mecs_io_encode_reply(NODE_ADDRESS, &reply, reply_frame);
     *reply_pending = true;
   }
@@ -97,6 +119,8 @@ void app_main(void) {
   uint32_t last_announce = milliseconds();
   uint8_t previous_inputs = 0;
   uint8_t measurement_pending = 0;
+  bool previous_master_alive = false;
+  bool previous_fault = false;
   TickType_t next_tick = xTaskGetTickCount();
 
   ESP_LOGI(TAG, "Node %u, board DI4, channels on GPIO0..3", identity.node_id);
@@ -105,7 +129,12 @@ void app_main(void) {
     const uint8_t raw_levels = di4_read_pins(&inputs);
     mecs_io_node_tick(&inputs, raw_levels, now);
 
+    if (previous_master_alive && !inputs.master_alive) {
+      ESP_LOGW(TAG, "Master lease expired; session=%u", inputs.session);
+    }
+
     if (mecs_can_poll()) {
+      reply_pending = false;
       announce_pending = true;
       announce_reason = MECS_ANNOUNCE_RECOVERY;
     }
@@ -117,6 +146,12 @@ void app_main(void) {
                    &reply_pending, &reply_frame);
     }
 
+    if (inputs.fault && !previous_fault) {
+      ESP_LOGE(TAG, "Hardware fault latched; inspect channel configuration and GPIO/LEDC errors");
+    }
+    previous_master_alive = inputs.master_alive;
+    previous_fault = inputs.fault;
+
     if (reply_pending && mecs_can_send(NULL, &reply_frame)) {
       reply_pending = false;
     }
@@ -125,7 +160,7 @@ void app_main(void) {
       announce_pending = false;
       last_announce = now;
     }
-    if ((uint32_t)(now - last_announce) >= 5000) {
+    if (!announce_pending && (uint32_t)(now - last_announce) >= 5000) {
       announce_pending = true;
       announce_reason = MECS_ANNOUNCE_REQUEST;
     }
@@ -183,6 +218,6 @@ void app_main(void) {
       }
     }
 
-    vTaskDelayUntil(&next_tick, pdMS_TO_TICKS(1));
+    vTaskDelayUntil(&next_tick, pdMS_TO_TICKS(1) ? pdMS_TO_TICKS(1) : 1);
   }
 }

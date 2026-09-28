@@ -32,9 +32,9 @@ void app_main(void) {
     uint32_t now = master_now_ms();
     xSemaphoreTakeRecursive(mutex, portMAX_DELAY);
     if (mecs_can_poll()) {
-      discover_pending = true;
-      heartbeat_pending = true;
+      master_transport_reset();
     }
+    master_service_state(now);
     mecs_frame_t frame;
     for (unsigned i = 0; i < 32 && mecs_can_receive(&frame); ++i) {
       master_accept_frame(&frame, now);
@@ -55,8 +55,9 @@ void app_main(void) {
     } else {
       master_transactions(now);
     }
+    mecs_can_get_stats(&can_stats);
     xSemaphoreGiveRecursive(mutex);
     master_console_poll();
-    vTaskDelay(pdMS_TO_TICKS(5));
+    vTaskDelay(pdMS_TO_TICKS(5) ? pdMS_TO_TICKS(5) : 1);
   }
 }

@@ -24,3 +24,10 @@ foreach(test client recovery)
   target_compile_options(test_${test} PRIVATE -Wall -Wextra -Werror -pedantic -UNDEBUG)
   add_test(NAME ${test} COMMAND test_${test})
 endforeach()
+
+# Exercise the actual transport source with a deterministic driver/RTOS model.
+add_executable(test_can test_can.c ../components/mecs_espidf/mecs_can.c)
+target_include_directories(test_can PRIVATE fakes
+    ../components/mecs_core/include ../components/mecs_espidf/include)
+target_compile_options(test_can PRIVATE -Wall -Wextra -Werror -pedantic -UNDEBUG)
+add_test(NAME can COMMAND test_can)

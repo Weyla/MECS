@@ -14,6 +14,8 @@ public:
 private:
   MECSTwaiTransport transport_;
   bool started_ = false;
+  bool sessionRetryPending_ = false;
+  uint32_t sessionRetryMs_ = 0;
   static bool send(void *, const mecs_frame_t *);
   static void log(void *, mecs_client_event_t, uint8_t, uint8_t, uint8_t,
                   uint32_t, mecs_error_t);

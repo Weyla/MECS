@@ -1,10 +1,19 @@
-name: ESP-IDF firmware builds
+name: Firmware and portable checks
 
 on:
   push:
   pull_request:
 
 jobs:
+  portable:
+    name: Portable and CAN adapter regressions
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: cmake -S SHARED/tests -B /tmp/mecs-build
+      - run: cmake --build /tmp/mecs-build --parallel
+      - run: ctest --test-dir /tmp/mecs-build --output-on-failure
+
   firmware:
     name: ${{ matrix.project }} (ESP-IDF 5.5)
     runs-on: ubuntu-latest

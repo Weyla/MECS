@@ -140,3 +140,19 @@ only extension.
 ## Managed node/pin API
 
 For configuration retained across node resets, use the [MECS node/pin API](MECS_API.md). The C API below remains a request/response interface and does not retain application intentions. Property values and C callback values are now `uint32_t` to carry precise duty.
+
+## Request deadlines and transport diagnostics
+
+The 1,500 ms request lifetime and the 300 ms wait after the third accepted
+transmission are checked in both `mecs_client_loop()` and
+`mecs_client_receive()`. A matching reply at or after expiry produces no
+confirmation, even when the adapter drains RX before servicing the loop.
+A timeout invalidates the affected cached property and means the remote
+operation's outcome is unknown. The raw C client's other queued requests remain
+queued; applications must handle its timeout event according to their sequence's
+requirements. The development master additionally cancels its queued commands.
+
+The ESP-IDF transport exposes `mecs_can_get_stats()` from its owner task.
+See [CAN diagnostics](DEVELOPMENT.md#can-diagnostics-and-recovery) for log levels,
+queue freshness, recovery behavior, and dashboard counters. The wire revision
+and property layouts are unchanged.

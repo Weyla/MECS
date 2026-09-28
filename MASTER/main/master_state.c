@@ -19,6 +19,7 @@ uint16_t session, transaction;
 bool discover_pending;
 bool heartbeat_pending;
 master_pending_t pending;
+mecs_can_stats_t can_stats;
 
 /* Persist the master session before use. Consecutive master boots therefore
  * cannot accidentally share a random session and keep output gates active after
@@ -114,6 +115,60 @@ static void cancel_node_commands(uint8_t address) {
   }
 }
 
+/* One invalidation path for transport recovery, reboot and lost leases. */
+static void invalidate_node(node_view_t *node) {
+  cancel_node_commands(node->identity.node_id);
+  if (pending.active && pending.command.node == node->identity.node_id) {
+    master_note("Node %u pending transaction cancelled", node->identity.node_id);
+    pending.active = false;
+  }
+  memset(node->valid, 0, sizeof(node->valid));
+  memset(node->measurement, 0, sizeof(node->measurement));
+  node->status_seen = false;
+  node->refresh_cursor = 0;
+  node->refreshing = true;
+  heartbeat_pending = true;
+}
+
+void master_transport_reset(void) {
+  for (unsigned i = 0; i < MASTER_MAX_NODES; ++i) {
+    if (nodes[i].used) invalidate_node(&nodes[i]);
+  }
+  discover_pending = true;
+  heartbeat_pending = true;
+  master_note("CAN recovered; commands cancelled, waiting for fresh node status");
+}
+
+static bool expire_request(uint32_t now) {
+  if (!pending.active ||
+      ((uint32_t)(now - pending.started_ms) < 1500 &&
+       (pending.attempts < 3 ||
+        (uint32_t)(now - pending.sent_ms) < MASTER_COMMAND_TIMEOUT_MS))) {
+    return false;
+  }
+  master_note("Node %u transaction %u timed out; outcome unknown, refresh before retrying actions",
+              pending.command.node, pending.request.transaction);
+  node_view_t *node = master_lookup(pending.command.node);
+  if (node) {
+    node->valid[master_slot(pending.command.channel)] &=
+        ~(1u << (pending.command.property & ~MECS_READ_FLAG));
+  }
+  xQueueReset(commands);
+  pending.active = false;
+  return true;
+}
+
+void master_service_state(uint32_t now) {
+  (void)expire_request(now);
+  for (unsigned i = 0; i < MASTER_MAX_NODES; ++i) {
+    node_view_t *node = &nodes[i];
+    if (node->used && node->status_seen && !master_online(node, now)) {
+      master_note("Node %u offline; cached settings invalidated", node->identity.node_id);
+      invalidate_node(node);
+    }
+  }
+}
+
 void master_discovered(void *context, const mecs_identity_t *identity,
                        mecs_announce_reason_t reason) {
   (void)context;
@@ -132,7 +187,7 @@ void master_discovered(void *context, const mecs_identity_t *identity,
     }
   }
   bool reset = !n->used || n->identity.board_type != identity->board_type ||
-               reason == MECS_ANNOUNCE_BOOT;
+               reason == MECS_ANNOUNCE_BOOT || reason == MECS_ANNOUNCE_RECOVERY;
   if (reset) {
     heartbeat_pending = true;
     /* A boot invalidates this node's queued intentions and old readback. */
@@ -195,13 +250,14 @@ static bool background_read(command_t *out, uint32_t now) {
 }
 
 void master_accept_frame(const mecs_frame_t *frame, uint32_t now) {
+  (void)expire_request(now);
   uint8_t address;
   mecs_io_reply_t reply;
   mecs_io_status_t status;
   mecs_pwm_measurement_t measurement;
   uint8_t channel;
   if (mecs_io_decode_reply(frame, &address, &reply)) {
-    if (!pending.active || address != pending.command.node ||
+    if (!pending.active || !pending.attempts || address != pending.command.node ||
         reply.session != session ||
         reply.transaction != pending.request.transaction ||
         reply.property != pending.request.property) {
@@ -258,17 +314,14 @@ void master_accept_frame(const mecs_frame_t *frame, uint32_t now) {
       discover_pending = true;
       return;
     }
-    if (n->status_seen && n->status.boot_id != status.boot_id) {
-      cancel_node_commands(address);
-      memset(n->valid, 0, sizeof(n->valid));
-      memset(n->measurement, 0, sizeof(n->measurement));
-      n->refresh_cursor = 0;
-      n->refreshing = true;
-      if (pending.active && pending.command.node == address) {
-        pending.active = false;
-      }
-      master_note("Node %u boot identity changed; refreshing settings",
-                  address);
+    if (n->status_seen &&
+        (n->status.boot_id != status.boot_id || !master_online(n, now) ||
+         (n->status.master_alive && !status.master_alive))) {
+      invalidate_node(n);
+      master_note("Node %u rebooted or lost its master lease; refreshing settings", address);
+    }
+    if (status.fault && (!n->status_seen || !n->status.fault)) {
+      master_note("Node %u reports a hardware fault", address);
     }
     bool was_online = master_online(n, now);
     n->status = status;
@@ -319,6 +372,7 @@ void master_transactions(uint32_t now) {
        * enable. */
       session = master_next_session();
       transaction = 0;
+      heartbeat_pending = true;
       xQueueReset(commands);
       master_note("Session rotated; outputs will require explicit enabling");
       return;
@@ -332,22 +386,7 @@ void master_transactions(uint32_t now) {
     pending.started_ms = now;
     pending.sent_ms = 0;
   }
-  if ((uint32_t)(now - pending.started_ms) >= 1500 ||
-      (pending.attempts >= 3 &&
-       (uint32_t)(now - pending.sent_ms) >= MASTER_COMMAND_TIMEOUT_MS)) {
-    master_note("Node %u transaction %u timed out; outcome unknown, refresh "
-                "before retrying actions",
-                pending.command.node, pending.request.transaction);
-    node_view_t *n = master_lookup(pending.command.node);
-    if (n) {
-      n->valid[master_slot(pending.command.channel)] &=
-          ~(1u << (pending.command.property & ~MECS_READ_FLAG));
-    }
-    /* Do not run later queued output actions after an uncertain result. */
-    xQueueReset(commands);
-    pending.active = false;
-    return;
-  }
+  if (expire_request(now)) return;
   if (!pending.attempts ||
       (uint32_t)(now - pending.sent_ms) >= MASTER_COMMAND_TIMEOUT_MS) {
     mecs_frame_t frame;
@@ -355,6 +394,9 @@ void master_transactions(uint32_t now) {
         mecs_can_send(NULL, &frame)) {
       ++pending.attempts;
       pending.sent_ms = now;
+      ESP_LOGD("master", "TX node=%u session=%u transaction=%u property=0x%02x attempt=%u",
+               pending.command.node, session, pending.request.transaction,
+               pending.request.property, pending.attempts);
     }
   }
 }

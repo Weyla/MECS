@@ -99,8 +99,40 @@ static void session_race(void) {
   assert(reply.error != MECS_OK && !node.config[3].value);
 }
 
+/* Exercise the real receive-before-loop order used by framework adapters,
+ * including the uint32_t clock rollover and the final retry deadline. */
+static void late_reply(uint32_t start, unsigned attempts, uint32_t delay) {
+  test_context_t test = {0};
+  mecs_client_t client;
+  const mecs_client_config_t config = {send_frame, &test, 7};
+  assert(mecs_client_begin(&client, &config, on_event, &test));
+  mecs_frame_t frame = output_announce();
+  mecs_client_receive(&client, &frame, start);
+  const mecs_io_status_t status = {.master_alive = true, .boot_id = 1};
+  mecs_io_encode_status(1, &status, &frame);
+  mecs_client_receive(&client, &frame, start);
+  assert(mecs_client_set(&client, 1, 0, MECS_PROP_VALUE, 1));
+  for (unsigned i = 0; i < attempts; ++i) {
+    mecs_client_loop(&client, start + i * MECS_CLIENT_REQUEST_TIMEOUT_MS);
+  }
+  assert(client.request_attempts == attempts);
+  mecs_io_reply_t reply = {.property = client.request.property,
+                          .transaction = client.request.transaction,
+                          .session = config.session, .value = 1};
+  mecs_io_encode_reply(1, &reply, &frame);
+  mecs_client_receive(&client, &frame, start + delay);
+  assert(test.timeouts == 1 && test.confirmed == 0);
+  assert(!client.request_active);
+  assert(!(mecs_client_node(&client, 1)->valid[0] & (1u << MECS_PROP_VALUE)));
+  mecs_client_loop(&client, start + delay);
+  assert(test.timeouts == 1);
+}
+
 int main(void) {
   session_race();
+  late_reply(100, 1, 1500);
+  late_reply(UINT32_MAX - 200, 1, 1500);
+  late_reply(100, 3, 3 * MECS_CLIENT_REQUEST_TIMEOUT_MS);
   test_context_t test = {0};
   mecs_client_t client;
   const mecs_client_config_t config = {

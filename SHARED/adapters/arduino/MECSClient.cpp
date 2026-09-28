@@ -44,9 +44,12 @@ void MECSClient::loop() {
   mecs_frame_t frame;
   for (unsigned count = 0; count < 24 && transport_.receive(&frame); ++count)
     receive(frame, now);
-  if (needsNewSession()) {
+  if (needsNewSession() &&
+      (!sessionRetryPending_ || static_cast<uint32_t>(now - sessionRetryMs_) >= 1000)) {
+    sessionRetryPending_ = true;
+    sessionRetryMs_ = now;
     const uint16_t session = nextSession();
-    if (session) setSession(session);
+    if (session && setSession(session)) sessionRetryPending_ = false;
   }
   service(now);
 }

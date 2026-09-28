@@ -6,6 +6,7 @@
 #include "master.h"
 #include "mecs_protocol.h"
 #include "mecs_io.h"
+#include "mecs_can.h"
 #include <stdbool.h>
 #include <stdint.h>
 
@@ -54,6 +55,7 @@ extern uint16_t session, transaction;
 extern bool discover_pending;
 extern bool heartbeat_pending;
 extern master_pending_t pending;
+extern mecs_can_stats_t can_stats;
 
 uint16_t master_next_session(void);
 uint32_t master_now_ms(void);
@@ -66,4 +68,6 @@ bool master_global_property(unsigned property);
 uint8_t master_role_of(const node_view_t *node);
 void master_accept_frame(const mecs_frame_t *frame, uint32_t now);
 void master_transactions(uint32_t now);
+void master_service_state(uint32_t now);
+void master_transport_reset(void);
 void master_console_poll(void);

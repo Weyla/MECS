@@ -3,7 +3,7 @@
 #include "driver/twai.h"
 
 bool MECSTwaiTransport::begin(int tx_gpio, int rx_gpio, uint32_t bitrate) {
-  if (started_) {
+  if (started_ || tx_gpio == rx_gpio) {
     return false;
   }
 
@@ -37,12 +37,14 @@ bool MECSTwaiTransport::begin(int tx_gpio, int rx_gpio, uint32_t bitrate) {
     (void)twai_driver_uninstall();
     return false;
   }
+  recovering_ = false;
   started_ = true;
   return true;
 }
 
 bool MECSTwaiTransport::send(const mecs_frame_t *frame) {
-  if (!started_ || !frame || frame->length > 8) {
+  if (!started_ || recovering_ || !frame || frame->length > 8 ||
+      frame->extended || frame->remote || frame->id > 0x7ff) {
     return false;
   }
   twai_message_t message = {};
@@ -81,6 +83,7 @@ void MECSTwaiTransport::end() {
     (void)twai_stop();
     (void)twai_driver_uninstall();
     started_ = false;
+    recovering_ = false;
   }
 }
 
@@ -98,6 +101,7 @@ bool MECSTwaiTransport::poll() {
     recovering_ = twai_initiate_recovery() == ESP_OK;
   } else if (recovering_ && status.state == TWAI_STATE_STOPPED &&
              twai_start() == ESP_OK) {
+    (void)twai_clear_receive_queue();
     recovering_ = false;
     return true;
   }

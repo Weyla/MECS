@@ -52,6 +52,9 @@ class MECSExpansion : public Component {
   static void on_event(void *context, mecs_client_event_t event,
                        uint8_t node, uint8_t channel, uint8_t property,
                        uint32_t value, mecs_error_t error);
+  bool save_next_session();
+  bool session_retry_pending_{false};
+  uint32_t session_retry_ms_{0};
   void refresh_entity_states(uint32_t now_ms);
   void on_frame(uint32_t id, bool extended, bool remote,
                 const std::vector<uint8_t> &data);

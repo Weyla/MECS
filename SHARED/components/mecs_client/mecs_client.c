@@ -161,6 +161,29 @@ void mecs_client_transport_reset(mecs_client_t *client) {
   client->discovery_requested = true;
 }
 
+/* Receive is commonly serviced before loop(). Enforce the same deadline in
+ * both paths so a delayed ACK cannot revive an expired request. */
+static bool expire_request(mecs_client_t *client, uint32_t now_ms) {
+  if (!client->request_active ||
+      ((uint32_t)(now_ms - client->request_started_ms) <
+           MECS_CLIENT_REQUEST_LIFETIME_MS &&
+       (client->request_attempts < MECS_CLIENT_MAX_ATTEMPTS ||
+        (uint32_t)(now_ms - client->request_sent_ms) <
+            MECS_CLIENT_REQUEST_TIMEOUT_MS))) {
+    return false;
+  }
+  client->request_active = false;
+  mecs_client_node_t *node = find_node(client, client->request_node);
+  if (node) {
+    node->valid[slot_for(client->request_channel)] &=
+        ~(1u << client->request_property);
+  }
+  emit(client, MECS_CLIENT_EVENT_REQUEST_TIMEOUT, client->request_node,
+       client->request_channel, client->request_property,
+       client->request_value, MECS_ERR_OFFLINE);
+  return true;
+}
+
 void mecs_client_loop(mecs_client_t *client, uint32_t now_ms) {
   if (!client || !client->config.send_frame) {
     return;
@@ -241,23 +264,7 @@ void mecs_client_loop(mecs_client_t *client, uint32_t now_ms) {
   if (!client->request_active) {
     return;
   }
-  if ((uint32_t)(now_ms - client->request_started_ms) >=
-      MECS_CLIENT_REQUEST_LIFETIME_MS) {
-    emit(client, MECS_CLIENT_EVENT_REQUEST_TIMEOUT, client->request_node,
-         client->request_channel, client->request_property,
-         client->request_value, MECS_ERR_OFFLINE);
-    client->request_active = false;
-    return;
-  }
-  if (client->request_attempts >= MECS_CLIENT_MAX_ATTEMPTS &&
-      (uint32_t)(now_ms - client->request_sent_ms) >=
-          MECS_CLIENT_REQUEST_TIMEOUT_MS) {
-    emit(client, MECS_CLIENT_EVENT_REQUEST_TIMEOUT, client->request_node,
-         client->request_channel, client->request_property,
-         client->request_value, MECS_ERR_OFFLINE);
-    client->request_active = false;
-    return;
-  }
+  if (expire_request(client, now_ms)) return;
   if (!client->request_attempts ||
       (uint32_t)(now_ms - client->request_sent_ms) >=
           MECS_CLIENT_REQUEST_TIMEOUT_MS) {
@@ -276,13 +283,15 @@ void mecs_client_receive(mecs_client_t *client,
     return;
   }
   client->now_ms = now_ms;
+  (void)expire_request(client, now_ms);
   uint8_t node_id, channel;
   mecs_io_reply_t reply;
   mecs_io_status_t status;
   mecs_pwm_measurement_t measurement;
 
   if (mecs_io_decode_reply(frame, &node_id, &reply)) {
-    if (!client->request_active || node_id != client->request_node ||
+    if (!client->request_active || !client->request_attempts ||
+        node_id != client->request_node ||
         reply.session != client->config.session ||
         reply.transaction != client->request.transaction ||
         reply.property != client->request.property) {
